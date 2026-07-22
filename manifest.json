@@ -1,0 +1,19 @@
+{
+  "name": "OLX Monitor",
+  "short_name": "OLX Monitor",
+  "description": "Panel wyszukiwan obserwowanych przez bota OLX",
+  "start_url": "./?src=hs",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#14171b",
+  "theme_color": "#1f7a3d",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

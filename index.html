@@ -4,6 +4,12 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="color-scheme" content="light dark" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="OLX Monitor" />
+<meta name="theme-color" content="#1f7a3d" />
 <title>OLX Monitor — panel</title>
 <style>
   :root {
@@ -55,8 +61,16 @@
   button.del { background: var(--danger); }
   button.del:hover { background: var(--danger-h); }
 
+  .listbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+  .listbar .cap { font-size: .8rem; font-weight: 600; color: var(--muted); }
+  button.on { background: #2f7d4f; }
+  button.off { background: #8a6d1f; }
+  .badge { display: inline-block; font-size: .68rem; font-weight: 700; letter-spacing: .03em;
+           background: #8a6d1f; color: #fff; border-radius: 6px; padding: 1px 6px; margin-left: 7px; vertical-align: 2px; }
+
   .target { border-top: 1px solid var(--line); padding: 15px 2px; }
   .target:first-child { border-top: none; padding-top: 2px; }
+  .target.isoff .info, .target.isoff .prev { opacity: .5; }
   .head { display: flex; align-items: flex-start; gap: 10px; }
   .head .info { flex: 1; min-width: 0; }
   .head .t { font-weight: 600; font-size: 1.02rem; }
@@ -90,7 +104,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-22</span>
+    <span class="app-version">v2026-07-22b</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -117,6 +131,10 @@
     </div>
 
     <div class="card">
+      <div class="listbar">
+        <span class="cap">Obserwowane wyszukiwania</span>
+        <button id="refresh" class="sm gray">↻ Odśwież</button>
+      </div>
       <div id="list"><div class="empty">Ładowanie…</div></div>
     </div>
 
@@ -141,7 +159,9 @@ function showMsg(text, kind) {
 }
 
 async function api(method, path, body) {
-  const opt = { method, headers: { "X-Panel-Token": token } };
+  // cache:no-store — a shortcut opened from the phone home screen was being
+  // served the previous session's list out of the webview cache.
+  const opt = { method, cache: "no-store", headers: { "X-Panel-Token": token } };
   if (body) { opt.headers["Content-Type"] = "application/json"; opt.body = JSON.stringify(body); }
   const res = await fetch(BASE + path, opt);
   let data = null;
@@ -241,11 +261,18 @@ function render(list) {
     const a = el("a", null, t.url);
     a.href = t.url; a.target = "_blank"; a.rel = "noopener";
     info.appendChild(a);
+    if (!t.enabled) {
+      block.classList.add("isoff");
+      info.querySelector(".t").appendChild(el("span", "badge", "WYŁĄCZONE"));
+    }
     const acts = el("div", "acts");
+    const bTog = el("button", "sm " + (t.enabled ? "off" : "on"), t.enabled ? "Wyłącz" : "Włącz");
     const bEdit = el("button", "sm gray", "Edytuj");
     const bDel = el("button", "sm del", "Usuń");
-    acts.appendChild(bEdit); acts.appendChild(bDel);
+    acts.appendChild(bTog); acts.appendChild(bEdit); acts.appendChild(bDel);
     head.appendChild(info); head.appendChild(acts);
+
+    bTog.onclick = () => toggle(t, bTog);
 
     const editBox = el("div", "editbox hidden");
     const prev = el("div", "prev");
@@ -287,6 +314,18 @@ async function add() {
   finally { btn.disabled = false; btn.textContent = "➕ Dodaj do obserwowanych"; }
 }
 
+async function toggle(t, btn) {
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spin"></span>';
+  try {
+    render(await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), { enabled: !t.enabled }));
+    showMsg((t.enabled ? "Wyłączono: " : "Włączono: ") + t.title, "ok");
+  } catch (e) {
+    showMsg(e.message, "err");
+    btn.disabled = false; btn.textContent = t.enabled ? "Wyłącz" : "Włącz";
+  }
+}
+
 async function del(t, btn) {
   if (!confirm('Usunąć „' + t.title + '” z obserwowanych?')) return;
   btn.disabled = true;
@@ -307,6 +346,18 @@ $("tok").addEventListener("keydown", (e) => { if (e.key === "Enter") $("tokSave"
 $("add").onclick = add;
 $("url").addEventListener("keydown", (e) => { if (e.key === "Enter") add(); });
 $("clearTok").onclick = (e) => { e.preventDefault(); localStorage.removeItem(TOK_KEY); token = ""; $("tok").value = ""; openGate(); };
+$("refresh").onclick = () => { if (token) load(); };
+
+// A home-screen shortcut does not reload the page — the webview freezes it and
+// restores it on reopen, so without these the list stays as it was days ago.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && token) load();
+});
+// Fired when the page is restored from the back/forward (bfcache) — the case
+// where visibilitychange alone does not fire.
+window.addEventListener("pageshow", (e) => {
+  if (e.persisted && token) load();
+});
 
 if (token) openApp(); else openGate();
 </script>
