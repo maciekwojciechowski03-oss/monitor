@@ -7,22 +7,17 @@
 <title>OLX Monitor — panel</title>
 <style>
   :root {
-    --bg: #f4f5f7;
-    --card: #ffffff;
-    --text: #1b1f24;
-    --muted: #6a7280;
-    --line: #e3e6ea;
-    --accent: #1f7a3d;
-    --accent-h: #196531;
-    --danger: #c23b3b;
-    --danger-h: #a02f2f;
+    --bg: #f4f5f7; --card: #ffffff; --text: #1b1f24; --muted: #6a7280;
+    --line: #e3e6ea; --soft: #f7f8fa;
+    --accent: #1f7a3d; --accent-h: #196531;
+    --danger: #c23b3b; --danger-h: #a02f2f;
     --shadow: 0 1px 3px rgba(0,0,0,.08), 0 6px 20px rgba(0,0,0,.05);
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #14171b; --card: #1e2227; --text: #e8eaed; --muted: #98a0aa;
-      --line: #2c313700; --line: #2c3137; --accent: #38a35a; --accent-h: #2f8c4d;
-      --danger: #e05656; --danger-h: #c94848;
+      --line: #2c3137; --soft: #23282e;
+      --accent: #38a35a; --accent-h: #2f8c4d; --danger: #e05656; --danger-h: #c94848;
       --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.35);
     }
   }
@@ -32,17 +27,17 @@
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     padding: 20px 14px 60px;
   }
-  .wrap { max-width: 680px; margin: 0 auto; }
-  header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
+  .wrap { max-width: 720px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
   h1 { font-size: 1.35rem; margin: 0; letter-spacing: -.01em; }
   .app-version { font-size: .72rem; color: var(--muted); white-space: nowrap; }
-  .sub { color: var(--muted); font-size: .85rem; margin: 0 0 18px; }
+  .sub { color: var(--muted); font-size: .85rem; margin: 4px 0 18px; }
   .card {
     background: var(--card); border: 1px solid var(--line); border-radius: 14px;
     box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px;
   }
   label { display: block; font-size: .8rem; font-weight: 600; color: var(--muted); margin: 0 0 5px; }
-  input[type=text], input[type=url], input[type=password] {
+  input {
     width: 100%; padding: 11px 12px; font-size: 15px; color: var(--text);
     background: var(--bg); border: 1px solid var(--line); border-radius: 10px; outline: none;
   }
@@ -54,16 +49,31 @@
   }
   button:hover { background: var(--accent-h); }
   button:disabled { opacity: .55; cursor: default; }
-  button.ghost { background: transparent; color: var(--muted); padding: 6px 8px; }
-  button.ghost:hover { background: transparent; color: var(--text); }
-  button.del { background: var(--danger); padding: 8px 12px; font-size: .85rem; }
+  button.sm { padding: 7px 12px; font-size: .84rem; }
+  button.gray { background: var(--muted); }
+  button.gray:hover { background: var(--text); }
+  button.del { background: var(--danger); }
   button.del:hover { background: var(--danger-h); }
-  .row { display: flex; align-items: center; gap: 12px; padding: 13px 4px; border-top: 1px solid var(--line); }
-  .row:first-child { border-top: none; }
-  .row .info { flex: 1; min-width: 0; }
-  .row .t { font-weight: 600; }
-  .row a { color: var(--muted); font-size: .78rem; text-decoration: none; word-break: break-all; }
-  .row a:hover { color: var(--accent); text-decoration: underline; }
+
+  .target { border-top: 1px solid var(--line); padding: 15px 2px; }
+  .target:first-child { border-top: none; padding-top: 2px; }
+  .head { display: flex; align-items: flex-start; gap: 10px; }
+  .head .info { flex: 1; min-width: 0; }
+  .head .t { font-weight: 600; font-size: 1.02rem; }
+  .head a { color: var(--muted); font-size: .76rem; text-decoration: none; word-break: break-all; }
+  .head a:hover { color: var(--accent); text-decoration: underline; }
+  .acts { display: flex; gap: 6px; flex-shrink: 0; }
+
+  .prev { margin-top: 10px; background: var(--soft); border-radius: 10px; padding: 4px 10px; }
+  .ad { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: .85rem; }
+  .ad:first-child { border-top: none; }
+  .ad .when { color: var(--muted); font-size: .76rem; white-space: nowrap; flex-shrink: 0; width: 76px; }
+  .ad .price { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
+  .ad .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ad a { color: var(--text); text-decoration: none; }
+  .ad a:hover { color: var(--accent); text-decoration: underline; }
+  .note { color: var(--muted); font-size: .8rem; padding: 8px 0; }
+
   .empty { color: var(--muted); text-align: center; padding: 22px 0; }
   .msg { padding: 10px 12px; border-radius: 10px; font-size: .88rem; margin-bottom: 12px; display: none; }
   .msg.err { display: block; background: rgba(194,59,59,.12); color: var(--danger); }
@@ -71,8 +81,8 @@
   .foot { text-align: center; color: var(--muted); font-size: .78rem; margin-top: 8px; }
   .foot a { color: var(--muted); }
   .hidden { display: none !important; }
-  .spin { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(255,255,255,.4);
-          border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -3px; }
+  .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
+          border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; }
   @keyframes r { to { transform: rotate(360deg); } }
 </style>
 </head>
@@ -80,19 +90,17 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-20</span>
+    <span class="app-version">v2026-07-22</span>
   </header>
-  <p class="sub">Linki, które ma obserwować bot. Każdy dostaje własny tytuł — pojawia się na górze powiadomienia na Slacku.</p>
+  <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
-  <!-- Token gate -->
   <div id="gate" class="card hidden">
     <label for="tok">Token panelu</label>
     <div class="field"><input id="tok" type="password" placeholder="wklej token" autocomplete="off" /></div>
     <button id="tokSave">Zapisz i wejdź</button>
-    <p class="foot" style="text-align:left;margin-top:10px">Token ustawiasz raz — zapisuje się w tej przeglądarce.</p>
+    <p class="foot" style="text-align:left;margin-top:10px">Token wpisujesz raz — zapisuje się w tej przeglądarce.</p>
   </div>
 
-  <!-- Main app -->
   <div id="app" class="hidden">
     <div id="msg" class="msg"></div>
 
@@ -112,18 +120,18 @@
       <div id="list"><div class="empty">Ładowanie…</div></div>
     </div>
 
-    <p class="foot">
-      Bot sprawdza OLX co minutę · <a id="clearTok" href="#">zmień token</a>
-    </p>
+    <p class="foot">Bot sprawdza OLX co minutę · <a id="clearTok" href="#">zmień token</a></p>
   </div>
 </div>
 
 <script>
 const BASE = "https://olx-monitor.maciekwojciechowski03.workers.dev";
 const TOK_KEY = "olx_panel_token";
+const PREVIEW_N = 5;
 
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem(TOK_KEY) || "";
+let targets = [];
 
 function showMsg(text, kind) {
   const m = $("msg");
@@ -143,29 +151,119 @@ async function api(method, path, body) {
   return data;
 }
 
-function render(targets) {
-  const list = $("list");
-  if (!targets || targets.length === 0) {
-    list.innerHTML = '<div class="empty">Brak obserwowanych linków. Dodaj pierwszy powyżej.</div>';
+const el = (tag, cls, text) => {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text != null) e.textContent = text;
+  return e;
+};
+
+// 5 newest offers this search currently returns
+async function loadPreview(id, box) {
+  box.innerHTML = "";
+  box.appendChild(el("div", "note", "Pobieram najnowsze ogłoszenia…"));
+  try {
+    const ads = await api("GET", "/preview?id=" + encodeURIComponent(id) + "&n=" + PREVIEW_N);
+    box.innerHTML = "";
+    if (!ads || ads.length === 0) {
+      box.appendChild(el("div", "note", "To wyszukiwanie nic teraz nie zwraca."));
+      return;
+    }
+    for (const ad of ads) {
+      const row = el("div", "ad");
+      row.appendChild(el("span", "when", ad.posted));
+      row.appendChild(el("span", "price", ad.price));
+      const name = el("span", "name");
+      const a = el("a", null, ad.title);
+      a.href = ad.url; a.target = "_blank"; a.rel = "noopener";
+      name.appendChild(a);
+      row.appendChild(name);
+      box.appendChild(row);
+    }
+  } catch (e) {
+    box.innerHTML = "";
+    box.appendChild(el("div", "note", "Nie udało się pobrać ogłoszeń: " + e.message));
+  }
+}
+
+// Inline edit of the title and/or the link
+function openEdit(t, block) {
+  block.innerHTML = "";
+  const f1 = el("div", "field");
+  f1.appendChild(el("label", null, "Tytuł"));
+  const iTitle = el("input"); iTitle.type = "text"; iTitle.value = t.title; iTitle.maxLength = 80;
+  f1.appendChild(iTitle);
+
+  const f2 = el("div", "field");
+  f2.appendChild(el("label", null, "Link OLX"));
+  const iUrl = el("input"); iUrl.type = "url"; iUrl.value = t.url;
+  f2.appendChild(iUrl);
+
+  const acts = el("div", "acts");
+  const save = el("button", "sm", "Zapisz");
+  const cancel = el("button", "sm gray", "Anuluj");
+  acts.appendChild(save); acts.appendChild(cancel);
+  block.appendChild(f1); block.appendChild(f2); block.appendChild(acts);
+
+  cancel.onclick = () => render(targets);
+  save.onclick = async () => {
+    const title = iTitle.value.trim();
+    const url = iUrl.value.trim();
+    if (!title) return showMsg("Tytuł nie może być pusty.", "err");
+    save.disabled = true; cancel.disabled = true;
+    save.innerHTML = '<span class="spin"></span> Zapisuję…';
+    try {
+      const updated = await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), { title, url });
+      render(updated);
+      showMsg("Zapisano: " + title, "ok");
+    } catch (e) {
+      showMsg(e.message, "err");
+      save.disabled = false; cancel.disabled = false; save.textContent = "Zapisz";
+    }
+  };
+  iTitle.focus();
+}
+
+function render(list) {
+  targets = list || [];
+  const box = $("list");
+  box.innerHTML = "";
+  if (targets.length === 0) {
+    box.appendChild(el("div", "empty", "Brak obserwowanych linków. Dodaj pierwszy powyżej."));
     return;
   }
-  list.innerHTML = "";
   for (const t of targets) {
-    const row = document.createElement("div");
-    row.className = "row";
-    const info = document.createElement("div");
-    info.className = "info";
-    const tt = document.createElement("div");
-    tt.className = "t";
-    tt.textContent = t.title;
-    const a = document.createElement("a");
-    a.href = t.url; a.target = "_blank"; a.rel = "noopener"; a.textContent = t.url;
-    info.appendChild(tt); info.appendChild(a);
-    const btn = document.createElement("button");
-    btn.className = "del"; btn.textContent = "Usuń";
-    btn.onclick = () => del(t.id, t.title, btn);
-    row.appendChild(info); row.appendChild(btn);
-    list.appendChild(row);
+    const block = el("div", "target");
+
+    const head = el("div", "head");
+    const info = el("div", "info");
+    info.appendChild(el("div", "t", t.title));
+    const a = el("a", null, t.url);
+    a.href = t.url; a.target = "_blank"; a.rel = "noopener";
+    info.appendChild(a);
+    const acts = el("div", "acts");
+    const bEdit = el("button", "sm gray", "Edytuj");
+    const bDel = el("button", "sm del", "Usuń");
+    acts.appendChild(bEdit); acts.appendChild(bDel);
+    head.appendChild(info); head.appendChild(acts);
+
+    const editBox = el("div", "editbox hidden");
+    const prev = el("div", "prev");
+
+    bEdit.onclick = () => {
+      head.classList.add("hidden");
+      prev.classList.add("hidden");
+      editBox.classList.remove("hidden");
+      openEdit(t, editBox);
+    };
+    bDel.onclick = () => del(t, bDel);
+
+    block.appendChild(head);
+    block.appendChild(editBox);
+    block.appendChild(prev);
+    box.appendChild(block);
+
+    loadPreview(t.id, prev);
   }
 }
 
@@ -182,31 +280,22 @@ async function add() {
   const btn = $("add");
   btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Sprawdzam link…';
   try {
-    const targets = await api("POST", "/targets", { title, url });
+    render(await api("POST", "/targets", { title, url }));
     $("title").value = ""; $("url").value = "";
-    render(targets);
     showMsg("Dodano: " + title, "ok");
   } catch (e) { showMsg(e.message, "err"); }
   finally { btn.disabled = false; btn.textContent = "➕ Dodaj do obserwowanych"; }
 }
 
-async function del(id, title, btn) {
-  if (!confirm('Usunąć „' + title + '” z obserwowanych?')) return;
+async function del(t, btn) {
+  if (!confirm('Usunąć „' + t.title + '” z obserwowanych?')) return;
   btn.disabled = true;
-  try { render(await api("DELETE", "/targets?id=" + encodeURIComponent(id))); showMsg("Usunięto: " + title, "ok"); }
+  try { render(await api("DELETE", "/targets?id=" + encodeURIComponent(t.id))); showMsg("Usunięto: " + t.title, "ok"); }
   catch (e) { showMsg(e.message, "err"); btn.disabled = false; }
 }
 
-function openGate() {
-  $("app").classList.add("hidden");
-  $("gate").classList.remove("hidden");
-  $("tok").focus();
-}
-function openApp() {
-  $("gate").classList.add("hidden");
-  $("app").classList.remove("hidden");
-  load();
-}
+function openGate() { $("app").classList.add("hidden"); $("gate").classList.remove("hidden"); $("tok").focus(); }
+function openApp() { $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); load(); }
 
 $("tokSave").onclick = () => {
   const v = $("tok").value.trim();
