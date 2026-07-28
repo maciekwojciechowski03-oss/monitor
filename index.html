@@ -76,7 +76,7 @@
   .head .t { font-weight: 600; font-size: 1.02rem; }
   .head a { color: var(--muted); font-size: .76rem; text-decoration: none; word-break: break-all; }
   .head a:hover { color: var(--accent); text-decoration: underline; }
-  .acts { display: flex; gap: 6px; flex-shrink: 0; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; justify-content: flex-end; }
 
   .prev { margin-top: 10px; background: var(--soft); border-radius: 10px; padding: 4px 10px; }
   .ad { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: .85rem; }
@@ -104,7 +104,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-22b</span>
+    <span class="app-version">v2026-07-22c</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -267,12 +267,15 @@ function render(list) {
     }
     const acts = el("div", "acts");
     const bTog = el("button", "sm " + (t.enabled ? "off" : "on"), t.enabled ? "Wyłącz" : "Włącz");
+    const bEnd = el("button", "sm " + (t.notifyEnding ? "on" : "gray"), (t.notifyEnding ? "⏳ Kończące: wł" : "⏳ Kończące: wył"));
     const bEdit = el("button", "sm gray", "Edytuj");
     const bDel = el("button", "sm del", "Usuń");
-    acts.appendChild(bTog); acts.appendChild(bEdit); acts.appendChild(bDel);
+    acts.appendChild(bTog); acts.appendChild(bEnd); acts.appendChild(bEdit); acts.appendChild(bDel);
     head.appendChild(info); head.appendChild(acts);
 
-    bTog.onclick = () => toggle(t, bTog);
+    bTog.onclick = () => flip(t, { enabled: !t.enabled }, bTog, (t.enabled ? "Wyłączono: " : "Włączono: ") + t.title);
+    bEnd.onclick = () => flip(t, { notifyEnding: !t.notifyEnding }, bEnd,
+      (t.notifyEnding ? "Alerty o kończących wyłączone: " : "Alerty o kończących włączone: ") + t.title);
 
     const editBox = el("div", "editbox hidden");
     const prev = el("div", "prev");
@@ -314,15 +317,16 @@ async function add() {
   finally { btn.disabled = false; btn.textContent = "➕ Dodaj do obserwowanych"; }
 }
 
-async function toggle(t, btn) {
+async function flip(t, patch, btn, okMsg) {
+  const prev = btn.textContent;
   btn.disabled = true;
   btn.innerHTML = '<span class="spin"></span>';
   try {
-    render(await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), { enabled: !t.enabled }));
-    showMsg((t.enabled ? "Wyłączono: " : "Włączono: ") + t.title, "ok");
+    render(await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), patch));
+    showMsg(okMsg, "ok");
   } catch (e) {
     showMsg(e.message, "err");
-    btn.disabled = false; btn.textContent = t.enabled ? "Wyłącz" : "Włącz";
+    btn.disabled = false; btn.textContent = prev;
   }
 }
 
