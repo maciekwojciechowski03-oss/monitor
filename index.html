@@ -71,21 +71,30 @@
   .target { border-top: 1px solid var(--line); padding: 15px 2px; }
   .target:first-child { border-top: none; padding-top: 2px; }
   .target.isoff .info, .target.isoff .prev { opacity: .5; }
-  .head { display: flex; align-items: flex-start; gap: 10px; }
-  .head .info { flex: 1; min-width: 0; }
-  .head .t { font-weight: 600; font-size: 1.02rem; }
-  .head a { color: var(--muted); font-size: .76rem; text-decoration: none; word-break: break-all; }
+  .head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; }
+  .head .info { flex: 1 1 200px; min-width: 0; }
+  .head .t { font-weight: 600; font-size: 1.02rem; overflow-wrap: anywhere; }
+  .head a { display: block; color: var(--muted); font-size: .76rem; text-decoration: none;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .head a:hover { color: var(--accent); text-decoration: underline; }
-  .acts { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; justify-content: flex-end; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  @media (max-width: 560px) {
+    .head .info { flex-basis: 100%; }
+    .acts { width: 100%; justify-content: flex-start; }
+    .acts button { flex: 1 1 auto; }
+  }
 
   .prev { margin-top: 10px; background: var(--soft); border-radius: 10px; padding: 4px 10px; }
-  .ad { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: .85rem; }
+  .ad { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: .85rem; }
   .ad:first-child { border-top: none; }
   .ad .when { color: var(--muted); font-size: .76rem; white-space: nowrap; flex-shrink: 0; width: 76px; }
   .ad .price { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-  .ad .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ad .name { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ad a { color: var(--text); text-decoration: none; }
   .ad a:hover { color: var(--accent); text-decoration: underline; }
+  .ad .ends { flex-basis: 100%; font-size: .74rem; color: var(--muted); padding-left: 86px; }
+  .ad .ends.soon { color: #c9820f; font-weight: 600; }
+  @media (max-width: 560px) { .ad .ends { padding-left: 0; } }
   .note { color: var(--muted); font-size: .8rem; padding: 8px 0; }
 
   .empty { color: var(--muted); text-align: center; padding: 22px 0; }
@@ -104,7 +113,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-22c</span>
+    <span class="app-version">v2026-07-22d</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -198,6 +207,7 @@ async function loadPreview(id, box) {
       a.href = ad.url; a.target = "_blank"; a.rel = "noopener";
       name.appendChild(a);
       row.appendChild(name);
+      if (ad.ends) row.appendChild(el("span", "ends" + (ad.endsSoon ? " soon" : ""), "⏳ " + ad.ends));
       box.appendChild(row);
     }
   } catch (e) {
