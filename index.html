@@ -110,7 +110,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-30</span>
+    <span class="app-version">v2026-07-30b</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -144,7 +144,7 @@
       <div id="list"><div class="empty">Ładowanie…</div></div>
     </div>
 
-    <p class="foot">Bot sprawdza OLX co minutę · <a id="clearTok" href="#">zmień token</a></p>
+    <p class="foot"><span id="freq">Bot sprawdza OLX co minutę</span> · <a id="clearTok" href="#">zmień token</a></p>
   </div>
 </div>
 
@@ -252,6 +252,18 @@ function openEdit(t, block) {
 
 function render(list) {
   targets = list || [];
+
+  // Real frequency: cron fires every minute but handles ONE search per run,
+  // round-robin — so each search is refreshed every (number of enabled) min.
+  const active = targets.filter((t) => t.enabled).length;
+  const freq = $("freq");
+  if (freq) {
+    freq.textContent =
+      active <= 1
+        ? "Bot sprawdza co minutę"
+        : `Bot bierze 1 wyszukiwanie na minutę → każde odświeżane co ~${active} min`;
+  }
+
   const box = $("list");
   box.innerHTML = "";
   if (targets.length === 0) {
