@@ -92,9 +92,6 @@
   .ad .name { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ad a { color: var(--text); text-decoration: none; }
   .ad a:hover { color: var(--accent); text-decoration: underline; }
-  .ad .ends { flex-basis: 100%; font-size: .74rem; color: var(--muted); padding-left: 86px; }
-  .ad .ends.soon { color: #c9820f; font-weight: 600; }
-  @media (max-width: 560px) { .ad .ends { padding-left: 0; } }
   .note { color: var(--muted); font-size: .8rem; padding: 8px 0; }
 
   .empty { color: var(--muted); text-align: center; padding: 22px 0; }
@@ -113,7 +110,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-22d</span>
+    <span class="app-version">v2026-07-30</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -207,7 +204,6 @@ async function loadPreview(id, box) {
       a.href = ad.url; a.target = "_blank"; a.rel = "noopener";
       name.appendChild(a);
       row.appendChild(name);
-      if (ad.ends) row.appendChild(el("span", "ends" + (ad.endsSoon ? " soon" : ""), "⏳ " + ad.ends));
       box.appendChild(row);
     }
   } catch (e) {
@@ -277,15 +273,12 @@ function render(list) {
     }
     const acts = el("div", "acts");
     const bTog = el("button", "sm " + (t.enabled ? "off" : "on"), t.enabled ? "Wyłącz" : "Włącz");
-    const bEnd = el("button", "sm " + (t.notifyEnding ? "on" : "gray"), (t.notifyEnding ? "⏳ Kończące: wł" : "⏳ Kończące: wył"));
     const bEdit = el("button", "sm gray", "Edytuj");
     const bDel = el("button", "sm del", "Usuń");
-    acts.appendChild(bTog); acts.appendChild(bEnd); acts.appendChild(bEdit); acts.appendChild(bDel);
+    acts.appendChild(bTog); acts.appendChild(bEdit); acts.appendChild(bDel);
     head.appendChild(info); head.appendChild(acts);
 
     bTog.onclick = () => flip(t, { enabled: !t.enabled }, bTog, (t.enabled ? "Wyłączono: " : "Włączono: ") + t.title);
-    bEnd.onclick = () => flip(t, { notifyEnding: !t.notifyEnding }, bEnd,
-      (t.notifyEnding ? "Alerty o kończących wyłączone: " : "Alerty o kończących włączone: ") + t.title);
 
     const editBox = el("div", "editbox hidden");
     const prev = el("div", "prev");
