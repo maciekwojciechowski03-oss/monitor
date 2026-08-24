@@ -72,6 +72,9 @@
   .stable th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; border-top: none; white-space: nowrap; }
   .stable td.when { white-space: nowrap; color: var(--muted); font-size: .78rem; }
   .stable td.price { font-weight: 600; white-space: nowrap; }
+  .stable td.thumb { width: 84px; }
+  .stable td.thumb img { width: 76px; height: 57px; object-fit: cover; border-radius: 6px; display: block; background: var(--soft); }
+  .stable td.thumb .noimg { width: 76px; height: 57px; border-radius: 6px; background: var(--soft); display: flex; align-items: center; justify-content: center; color: var(--muted); font-size: .7rem; }
   .stable a { color: var(--text); text-decoration: none; }
   .stable a:hover { color: var(--accent); text-decoration: underline; }
   button.link-btn { background: transparent; color: var(--accent); padding: 3px 0 0; font-size: .76rem; font-weight: 600; }
@@ -129,7 +132,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-08-06b</span>
+    <span class="app-version">v2026-08-06c</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -407,10 +410,24 @@ async function loadSold() {
     const wrap = el("div", "stwrap");
     const table = document.createElement("table");
     table.className = "stable";
-    table.innerHTML = "<thead><tr><th>Zniknęło</th><th>Wyszukiwanie</th><th>Tytuł</th><th>Cena</th></tr></thead>";
+    table.innerHTML = "<thead><tr><th>Zdjęcie</th><th>Dodano</th><th>Zniknęło</th><th>Wyszukiwanie</th><th>Tytuł</th><th>Cena</th></tr></thead>";
     const tb = document.createElement("tbody");
     for (const r of recs) {
       const tr = document.createElement("tr");
+
+      const tdThumb = el("td", "thumb");
+      if (r.photo) {
+        const img = document.createElement("img");
+        img.src = r.photo; img.alt = ""; img.loading = "lazy";
+        const ia = el("a"); ia.href = r.url; ia.target = "_blank"; ia.rel = "noopener";
+        ia.appendChild(img);
+        tdThumb.appendChild(ia);
+      } else {
+        tdThumb.appendChild(el("div", "noimg", "brak"));
+      }
+      tr.appendChild(tdThumb);
+
+      tr.appendChild(el("td", "when", r.added ? fmtDate(r.added) : ""));
       tr.appendChild(el("td", "when", fmtDate(r.soldAt)));
       tr.appendChild(el("td", null, r.search || ""));
       const tdTitle = el("td");
@@ -425,7 +442,7 @@ async function loadSold() {
         const descTr = document.createElement("tr");
         descTr.className = "descrow";
         const dtd = document.createElement("td");
-        dtd.colSpan = 4;
+        dtd.colSpan = 6;
         const boxDesc = el("div", "descbox hidden", r.desc);
         dtd.appendChild(boxDesc);
         descTr.appendChild(dtd);
