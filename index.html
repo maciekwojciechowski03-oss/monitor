@@ -61,6 +61,20 @@
   button.del { background: var(--danger); }
   button.del:hover { background: var(--danger-h); }
 
+  .tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+  .tab { background: var(--card); color: var(--muted); border: 1px solid var(--line); font-weight: 600; }
+  .tab:hover { background: var(--card); color: var(--text); }
+  .tab.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .tab.active:hover { background: var(--accent-h); }
+  .stwrap { overflow-x: auto; }
+  .stable { width: 100%; border-collapse: collapse; font-size: .85rem; }
+  .stable th, .stable td { text-align: left; padding: 8px 10px; border-top: 1px solid var(--line); vertical-align: top; }
+  .stable th { color: var(--muted); font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; border-top: none; white-space: nowrap; }
+  .stable td.when { white-space: nowrap; color: var(--muted); font-size: .78rem; }
+  .stable td.price { font-weight: 600; white-space: nowrap; }
+  .stable a { color: var(--text); text-decoration: none; }
+  .stable a:hover { color: var(--accent); text-decoration: underline; }
+
   .listbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
   .listbar .cap { font-size: .8rem; font-weight: 600; color: var(--muted); }
   button.on { background: #2f7d4f; }
@@ -110,7 +124,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-07-30b</span>
+    <span class="app-version">v2026-08-06</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -124,24 +138,42 @@
   <div id="app" class="hidden">
     <div id="msg" class="msg"></div>
 
-    <div class="card">
-      <div class="field">
-        <label for="title">Tytuł wyszukiwania (widoczny na Slacku)</label>
-        <input id="title" type="text" placeholder="np. BMW E90 do 20 tys." maxlength="80" />
-      </div>
-      <div class="field">
-        <label for="url">Link OLX (skopiuj z paska adresu po ustawieniu filtrów)</label>
-        <input id="url" type="url" placeholder="https://www.olx.pl/motoryzacja/samochody/..." />
-      </div>
-      <button id="add">➕ Dodaj do obserwowanych</button>
+    <div class="tabs">
+      <button id="tabSearch" class="tab active">Obserwowane</button>
+      <button id="tabSold" class="tab">Sprzedane</button>
     </div>
 
-    <div class="card">
-      <div class="listbar">
-        <span class="cap">Obserwowane wyszukiwania</span>
-        <button id="refresh" class="sm gray">↻ Odśwież</button>
+    <div id="view-search">
+      <div class="card">
+        <div class="field">
+          <label for="title">Tytuł wyszukiwania (widoczny na Slacku)</label>
+          <input id="title" type="text" placeholder="np. BMW E90 do 20 tys." maxlength="80" />
+        </div>
+        <div class="field">
+          <label for="url">Link OLX (skopiuj z paska adresu po ustawieniu filtrów)</label>
+          <input id="url" type="url" placeholder="https://www.olx.pl/motoryzacja/samochody/..." />
+        </div>
+        <button id="add">➕ Dodaj do obserwowanych</button>
       </div>
-      <div id="list"><div class="empty">Ładowanie…</div></div>
+
+      <div class="card">
+        <div class="listbar">
+          <span class="cap">Obserwowane wyszukiwania</span>
+          <button id="refresh" class="sm gray">↻ Odśwież</button>
+        </div>
+        <div id="list"><div class="empty">Ładowanie…</div></div>
+      </div>
+    </div>
+
+    <div id="view-sold" class="hidden">
+      <div class="card">
+        <div class="listbar">
+          <span class="cap" id="soldCap">Sprzedane ogłoszenia</span>
+          <button id="refreshSold" class="sm gray">↻ Odśwież</button>
+        </div>
+        <div id="soldList"><div class="empty">Ładowanie…</div></div>
+      </div>
+      <p class="foot">Ogłoszenie bez odpowiedzi przez 2 h bot uznaje za sprzedane — automatycznie.</p>
     </div>
 
     <p class="foot"><span id="freq">Bot sprawdza OLX co minutę</span> · <a id="clearTok" href="#">zmień token</a></p>
@@ -351,6 +383,61 @@ async function del(t, btn) {
   try { render(await api("DELETE", "/targets?id=" + encodeURIComponent(t.id))); showMsg("Usunięto: " + t.title, "ok"); }
   catch (e) { showMsg(e.message, "err"); btn.disabled = false; }
 }
+
+// --- Sprzedane (archiwum) ---
+function fmtDate(iso) {
+  const t = Date.parse(iso);
+  if (isNaN(t)) return iso || "";
+  return new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(t));
+}
+
+async function loadSold() {
+  const box = $("soldList");
+  box.innerHTML = '<div class="empty">Ładowanie…</div>';
+  try {
+    const data = await api("GET", "/archive");
+    const recs = (data.records || []).slice().sort((a, b) => (a.soldAt < b.soldAt ? 1 : -1));
+    $("soldCap").textContent = "Sprzedane ogłoszenia — " + recs.length;
+    if (!recs.length) { box.innerHTML = '<div class="empty">Jeszcze nic nie zostało zapisane jako sprzedane.</div>'; return; }
+    const wrap = el("div", "stwrap");
+    const table = document.createElement("table");
+    table.className = "stable";
+    table.innerHTML = "<thead><tr><th>Zniknęło</th><th>Wyszukiwanie</th><th>Tytuł</th><th>Cena</th></tr></thead>";
+    const tb = document.createElement("tbody");
+    for (const r of recs) {
+      const tr = document.createElement("tr");
+      tr.appendChild(el("td", "when", fmtDate(r.soldAt)));
+      tr.appendChild(el("td", null, r.search || ""));
+      const tdTitle = el("td");
+      const a = el("a", null, r.title || "");
+      a.href = r.url; a.target = "_blank"; a.rel = "noopener";
+      if (r.desc) a.title = r.desc.slice(0, 300);
+      tdTitle.appendChild(a);
+      tr.appendChild(tdTitle);
+      tr.appendChild(el("td", "price", r.lastPrice || ""));
+      tb.appendChild(tr);
+    }
+    table.appendChild(tb);
+    wrap.appendChild(table);
+    box.innerHTML = "";
+    box.appendChild(wrap);
+  } catch (e) {
+    box.innerHTML = "";
+    box.appendChild(el("div", "note", "Nie udało się pobrać: " + e.message));
+  }
+}
+
+function showTab(which) {
+  const sold = which === "sold";
+  $("view-search").classList.toggle("hidden", sold);
+  $("view-sold").classList.toggle("hidden", !sold);
+  $("tabSearch").classList.toggle("active", !sold);
+  $("tabSold").classList.toggle("active", sold);
+  if (sold) loadSold();
+}
+$("tabSearch").onclick = () => showTab("search");
+$("tabSold").onclick = () => showTab("sold");
+$("refreshSold").onclick = () => loadSold();
 
 function openGate() { $("app").classList.add("hidden"); $("gate").classList.remove("hidden"); $("tok").focus(); }
 function openApp() { $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); load(); }
