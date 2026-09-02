@@ -133,7 +133,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-09-02</span>
+    <span class="app-version">v2026-09-02b</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -178,8 +178,8 @@
     <div id="view-block" class="hidden">
       <div class="card">
         <div class="field">
-          <label for="blockId">ID sprzedawcy (numer z profilu OLX)</label>
-          <input id="blockId" type="text" inputmode="numeric" placeholder="np. 2552632025" />
+          <label for="blockId">Link do ogłoszenia lub profilu OLX (albo samo numeryczne ID)</label>
+          <input id="blockId" type="text" placeholder="wklej link olx.pl/… albo ID sprzedawcy" />
         </div>
         <div class="field">
           <label for="blockNote">Notatka (opcjonalnie)</label>
@@ -188,7 +188,7 @@
         <button id="blockAdd">➕ Dodaj do czarnej listy</button>
         <p class="foot" style="text-align:left;margin-top:10px">
           Ogłoszenia od tych sprzedawców nie trafiają do powiadomień Slack ani do kolejek botów.
-          <br>ID znajdziesz w linku profilu OLX (<code>…/uzytkownik/…-ID<b>xxx</b>/</code>) — to część po <code>ID</code>.
+          <br>Najprościej: skopiuj link profilu (<code>olx.pl/oferty/uzytkownik/…</code>) albo dowolnego ogłoszenia — system sam wyciągnie ID sprzedawcy i jego nazwę.
         </p>
       </div>
 
@@ -529,7 +529,7 @@ async function loadBlock() {
       const info = el("div", "info");
       const t = el("div", "t");
       t.style.fontFamily = 'ui-monospace, "SF Mono", Consolas, monospace';
-      t.textContent = x.id;
+      t.textContent = x.userName ? (x.userName + "  ·  ID " + x.id) : ("ID " + x.id);
       info.appendChild(t);
       if (x.note) {
         const n = el("div"); n.style.color = "var(--muted)"; n.style.fontSize = ".8rem"; n.style.marginTop = "2px";
@@ -561,16 +561,19 @@ async function loadBlock() {
 }
 
 async function addBlock() {
-  const id = $("blockId").value.trim();
+  const raw = $("blockId").value.trim();
   const note = $("blockNote").value.trim();
-  if (!id) { showMsg("Podaj ID sprzedawcy", "err"); return; }
-  if (!/^\d+$/.test(id)) { showMsg("ID to sam numer (bez liter)", "err"); return; }
+  if (!raw) { showMsg("Podaj link OLX albo ID sprzedawcy", "err"); return; }
+  // sam numer = id; wszystko inne przekazujemy jako url — worker rozpozna
+  const body = /^\d+$/.test(raw) ? { id: raw, note } : { url: raw, note };
   const btn = $("blockAdd"); const prev = btn.textContent;
   btn.disabled = true; btn.textContent = "Dodaję…";
   try {
-    await api("POST", "/blacklist/api", { id, note });
+    const res = await api("POST", "/blacklist/api", body);
     $("blockId").value = ""; $("blockNote").value = "";
-    showMsg("Dodano " + id + " do czarnej listy", "ok");
+    const added = res && res.added;
+    const who = added ? (added.userName ? added.userName + " (ID " + added.id + ")" : "ID " + added.id) : raw;
+    showMsg("Dodano " + who + " do czarnej listy", "ok");
     loadBlock();
   } catch (e) { showMsg(e.message, "err"); }
   finally { btn.disabled = false; btn.textContent = prev; }
