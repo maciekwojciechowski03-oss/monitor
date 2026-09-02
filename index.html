@@ -83,6 +83,7 @@
   .descbox { white-space: pre-wrap; word-break: break-word; font-size: .82rem; line-height: 1.5;
              background: var(--soft); border-radius: 8px; padding: 10px 12px; }
 
+  .barbtns { display: flex; gap: 6px; flex-shrink: 0; }
   .listbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 4px; }
   .listbar .cap { font-size: .8rem; font-weight: 600; color: var(--muted); }
   button.on { background: #2f7d4f; }
@@ -132,7 +133,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-08-06c</span>
+    <span class="app-version">v2026-09-01</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -177,7 +178,10 @@
       <div class="card">
         <div class="listbar">
           <span class="cap" id="soldCap">Sprzedane ogłoszenia</span>
-          <button id="refreshSold" class="sm gray">↻ Odśwież</button>
+          <span class="barbtns">
+            <button id="dlCsv" class="sm">⬇ Pobierz CSV</button>
+            <button id="refreshSold" class="sm gray">↻ Odśwież</button>
+          </span>
         </div>
         <div id="soldList"><div class="empty">Ładowanie…</div></div>
       </div>
@@ -477,6 +481,30 @@ function showTab(which) {
 $("tabSearch").onclick = () => showTab("search");
 $("tabSold").onclick = () => showTab("sold");
 $("refreshSold").onclick = () => loadSold();
+
+async function downloadSoldCsv() {
+  const btn = $("dlCsv");
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Pobieram…";
+  try {
+    const res = await fetch(BASE + "/archive.csv", { cache: "no-store", headers: { "X-Panel-Token": token } });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date();
+    const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    a.href = u; a.download = "sprzedane_" + stamp + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(u);
+    showMsg("Pobrano plik CSV.", "ok");
+  } catch (e) {
+    showMsg("Nie udało się pobrać CSV: " + e.message, "err");
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+$("dlCsv").onclick = downloadSoldCsv;
 
 function openGate() { $("app").classList.add("hidden"); $("gate").classList.remove("hidden"); $("tok").focus(); }
 function openApp() { $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); load(); }
