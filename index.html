@@ -133,7 +133,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-09-01</span>
+    <span class="app-version">v2026-09-02</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -150,6 +150,7 @@
     <div class="tabs">
       <button id="tabSearch" class="tab active">Obserwowane</button>
       <button id="tabSold" class="tab">Sprzedane</button>
+      <button id="tabBlock" class="tab">Zablokowani</button>
     </div>
 
     <div id="view-search">
@@ -171,6 +172,32 @@
           <button id="refresh" class="sm gray">↻ Odśwież</button>
         </div>
         <div id="list"><div class="empty">Ładowanie…</div></div>
+      </div>
+    </div>
+
+    <div id="view-block" class="hidden">
+      <div class="card">
+        <div class="field">
+          <label for="blockId">ID sprzedawcy (numer z profilu OLX)</label>
+          <input id="blockId" type="text" inputmode="numeric" placeholder="np. 2552632025" />
+        </div>
+        <div class="field">
+          <label for="blockNote">Notatka (opcjonalnie)</label>
+          <input id="blockNote" type="text" placeholder="np. dealer, spamer, oszust" maxlength="80" />
+        </div>
+        <button id="blockAdd">➕ Dodaj do czarnej listy</button>
+        <p class="foot" style="text-align:left;margin-top:10px">
+          Ogłoszenia od tych sprzedawców nie trafiają do powiadomień Slack ani do kolejek botów.
+          <br>ID znajdziesz w linku profilu OLX (<code>…/uzytkownik/…-ID<b>xxx</b>/</code>) — to część po <code>ID</code>.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="listbar">
+          <span class="cap" id="blockCap">Zablokowani sprzedawcy</span>
+          <button id="refreshBlock" class="sm gray">↻ Odśwież</button>
+        </div>
+        <div id="blockList"><div class="empty">Ładowanie…</div></div>
       </div>
     </div>
 
@@ -471,16 +498,86 @@ async function loadSold() {
 }
 
 function showTab(which) {
-  const sold = which === "sold";
-  $("view-search").classList.toggle("hidden", sold);
-  $("view-sold").classList.toggle("hidden", !sold);
-  $("tabSearch").classList.toggle("active", !sold);
-  $("tabSold").classList.toggle("active", sold);
-  if (sold) loadSold();
+  $("view-search").classList.toggle("hidden", which !== "search");
+  $("view-sold").classList.toggle("hidden", which !== "sold");
+  $("view-block").classList.toggle("hidden", which !== "block");
+  $("tabSearch").classList.toggle("active", which === "search");
+  $("tabSold").classList.toggle("active", which === "sold");
+  $("tabBlock").classList.toggle("active", which === "block");
+  if (which === "sold") loadSold();
+  if (which === "block") loadBlock();
 }
 $("tabSearch").onclick = () => showTab("search");
 $("tabSold").onclick = () => showTab("sold");
+$("tabBlock").onclick = () => showTab("block");
 $("refreshSold").onclick = () => loadSold();
+$("refreshBlock").onclick = () => loadBlock();
+
+async function loadBlock() {
+  const box = $("blockList");
+  box.innerHTML = '<div class="empty">Ładowanie…</div>';
+  try {
+    const list = await api("GET", "/blacklist/api");
+    $("blockCap").textContent = "Zablokowani sprzedawcy (" + list.length + ")";
+    if (!list.length) { box.innerHTML = '<div class="empty">Nikt nie jest na czarnej liście.</div>'; return; }
+    // najnowsze na górze
+    list.sort((a, b) => String(b.addedAt || "").localeCompare(String(a.addedAt || "")));
+    box.innerHTML = "";
+    for (const x of list) {
+      const row = el("div", "target");
+      const head = el("div", "head");
+      const info = el("div", "info");
+      const t = el("div", "t");
+      t.style.fontFamily = 'ui-monospace, "SF Mono", Consolas, monospace';
+      t.textContent = x.id;
+      info.appendChild(t);
+      if (x.note) {
+        const n = el("div"); n.style.color = "var(--muted)"; n.style.fontSize = ".8rem"; n.style.marginTop = "2px";
+        n.textContent = x.note;
+        info.appendChild(n);
+      }
+      if (x.addedAt) {
+        const d = el("div"); d.style.color = "var(--muted)"; d.style.fontSize = ".72rem"; d.style.marginTop = "2px";
+        d.textContent = "dodano: " + new Date(x.addedAt).toLocaleString("pl-PL", { timeZone: "Europe/Warsaw" });
+        info.appendChild(d);
+      }
+      head.appendChild(info);
+      const btns = el("div", "barbtns");
+      const rm = el("button", "sm del"); rm.textContent = "Usuń";
+      rm.onclick = async () => {
+        if (!confirm("Usunąć ID " + x.id + " z czarnej listy?")) return;
+        try { await api("DELETE", "/blacklist/api?id=" + encodeURIComponent(x.id)); showMsg("Usunięto " + x.id, "ok"); loadBlock(); }
+        catch (e) { showMsg(e.message, "err"); }
+      };
+      btns.appendChild(rm);
+      head.appendChild(btns);
+      row.appendChild(head);
+      box.appendChild(row);
+    }
+  } catch (e) {
+    box.innerHTML = "";
+    box.appendChild(el("div", "note", "Nie udało się pobrać: " + e.message));
+  }
+}
+
+async function addBlock() {
+  const id = $("blockId").value.trim();
+  const note = $("blockNote").value.trim();
+  if (!id) { showMsg("Podaj ID sprzedawcy", "err"); return; }
+  if (!/^\d+$/.test(id)) { showMsg("ID to sam numer (bez liter)", "err"); return; }
+  const btn = $("blockAdd"); const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Dodaję…";
+  try {
+    await api("POST", "/blacklist/api", { id, note });
+    $("blockId").value = ""; $("blockNote").value = "";
+    showMsg("Dodano " + id + " do czarnej listy", "ok");
+    loadBlock();
+  } catch (e) { showMsg(e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
+}
+$("blockAdd").onclick = addBlock;
+$("blockId").addEventListener("keydown", (e) => { if (e.key === "Enter") addBlock(); });
+$("blockNote").addEventListener("keydown", (e) => { if (e.key === "Enter") addBlock(); });
 
 async function downloadSoldCsv() {
   const btn = $("dlCsv");
