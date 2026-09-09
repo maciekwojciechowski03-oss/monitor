@@ -133,7 +133,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-09-02b</span>
+    <span class="app-version">v2026-09-09</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -178,6 +178,21 @@
     <div id="view-block" class="hidden">
       <div class="card">
         <div class="field">
+          <label for="blockName">Nazwa sprzedawcy (dokładna zgodność, wielkość liter bez znaczenia)</label>
+          <input id="blockName" type="text" placeholder="np. Master Mobiles Ogrodowa 9" />
+        </div>
+        <div class="field">
+          <label for="blockNameNote">Notatka (opcjonalnie)</label>
+          <input id="blockNameNote" type="text" placeholder="np. dealer, spamer" maxlength="80" />
+        </div>
+        <button id="blockNameAdd">➕ Dodaj nazwę do czarnej listy</button>
+        <p class="foot" style="text-align:left;margin-top:10px">
+          Nazwę sprzedawcy widzisz w kolumnie <b>userName</b> w arkuszu Kolejki albo na profilu OLX. Blokujemy dokładnie tę nazwę — jak sprzedawca zmieni nazwę, trzeba dodać nową.
+        </p>
+      </div>
+
+      <div class="card">
+        <div class="field">
           <label for="blockId">Link do ogłoszenia lub profilu OLX (albo samo numeryczne ID)</label>
           <input id="blockId" type="text" placeholder="wklej link olx.pl/… albo ID sprzedawcy" />
         </div>
@@ -185,10 +200,9 @@
           <label for="blockNote">Notatka (opcjonalnie)</label>
           <input id="blockNote" type="text" placeholder="np. dealer, spamer, oszust" maxlength="80" />
         </div>
-        <button id="blockAdd">➕ Dodaj do czarnej listy</button>
+        <button id="blockAdd">➕ Dodaj po ID / linku</button>
         <p class="foot" style="text-align:left;margin-top:10px">
-          Ogłoszenia od tych sprzedawców nie trafiają do powiadomień Slack ani do kolejek botów.
-          <br>Najprościej: skopiuj link profilu (<code>olx.pl/oferty/uzytkownik/…</code>) albo dowolnego ogłoszenia — system sam wyciągnie ID sprzedawcy i jego nazwę.
+          Ogłoszenia od tych sprzedawców nie trafiają do powiadomień Slack ani do kolejek botów. Wklej link profilu (<code>olx.pl/oferty/uzytkownik/…</code>) albo dowolnego ogłoszenia — system sam wyciągnie ID.
         </p>
       </div>
 
@@ -529,7 +543,11 @@ async function loadBlock() {
       const info = el("div", "info");
       const t = el("div", "t");
       t.style.fontFamily = 'ui-monospace, "SF Mono", Consolas, monospace';
-      t.textContent = x.userName ? (x.userName + "  ·  ID " + x.id) : ("ID " + x.id);
+      if (x.name) {
+        t.textContent = "📝 " + x.name;
+      } else {
+        t.textContent = "🆔 " + (x.userName ? (x.userName + "  ·  ID " + x.id) : ("ID " + x.id));
+      }
       info.appendChild(t);
       if (x.note) {
         const n = el("div"); n.style.color = "var(--muted)"; n.style.fontSize = ".8rem"; n.style.marginTop = "2px";
@@ -545,8 +563,10 @@ async function loadBlock() {
       const btns = el("div", "barbtns");
       const rm = el("button", "sm del"); rm.textContent = "Usuń";
       rm.onclick = async () => {
-        if (!confirm("Usunąć ID " + x.id + " z czarnej listy?")) return;
-        try { await api("DELETE", "/blacklist/api?id=" + encodeURIComponent(x.id)); showMsg("Usunięto " + x.id, "ok"); loadBlock(); }
+        const what = x.name ? "nazwę \"" + x.name + "\"" : "ID " + x.id;
+        if (!confirm("Usunąć " + what + " z czarnej listy?")) return;
+        const q = x.name ? ("?name=" + encodeURIComponent(x.name)) : ("?id=" + encodeURIComponent(x.id));
+        try { await api("DELETE", "/blacklist/api" + q); showMsg("Usunięto " + what, "ok"); loadBlock(); }
         catch (e) { showMsg(e.message, "err"); }
       };
       btns.appendChild(rm);
@@ -581,6 +601,24 @@ async function addBlock() {
 $("blockAdd").onclick = addBlock;
 $("blockId").addEventListener("keydown", (e) => { if (e.key === "Enter") addBlock(); });
 $("blockNote").addEventListener("keydown", (e) => { if (e.key === "Enter") addBlock(); });
+
+async function addBlockName() {
+  const name = $("blockName").value.trim();
+  const note = $("blockNameNote").value.trim();
+  if (!name) { showMsg("Podaj nazwę sprzedawcy", "err"); return; }
+  const btn = $("blockNameAdd"); const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Dodaję…";
+  try {
+    await api("POST", "/blacklist/api", { name, note });
+    $("blockName").value = ""; $("blockNameNote").value = "";
+    showMsg("Dodano nazwę \"" + name + "\" do czarnej listy", "ok");
+    loadBlock();
+  } catch (e) { showMsg(e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
+}
+$("blockNameAdd").onclick = addBlockName;
+$("blockName").addEventListener("keydown", (e) => { if (e.key === "Enter") addBlockName(); });
+$("blockNameNote").addEventListener("keydown", (e) => { if (e.key === "Enter") addBlockName(); });
 
 async function downloadSoldCsv() {
   const btn = $("dlCsv");
