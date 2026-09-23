@@ -93,28 +93,36 @@
 
   .target { border-top: 1px solid var(--line); padding: 15px 2px; }
   .target:first-child { border-top: none; padding-top: 2px; }
-  .target.isoff .info, .target.isoff .prev { opacity: .5; }
+  .target.isoff .info { opacity: .5; }
   .head { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px 10px; }
   .head .info { flex: 1 1 200px; min-width: 0; }
   .head .t { font-weight: 600; font-size: 1.02rem; overflow-wrap: anywhere; }
   .head a { display: block; color: var(--muted); font-size: .76rem; text-decoration: none;
             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .head a:hover { color: var(--accent); text-decoration: underline; }
-  .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .acts { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
   @media (max-width: 560px) {
     .head .info { flex-basis: 100%; }
     .acts { width: 100%; justify-content: flex-start; }
     .acts button { flex: 1 1 auto; }
+    .acts .switch { flex: 0 0 auto; }
   }
 
-  .prev { margin-top: 10px; background: var(--soft); border-radius: 10px; padding: 4px 10px; }
-  .ad { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); font-size: .85rem; }
-  .ad:first-child { border-top: none; }
-  .ad .when { color: var(--muted); font-size: .76rem; white-space: nowrap; flex-shrink: 0; width: 76px; }
-  .ad .price { font-weight: 600; white-space: nowrap; flex-shrink: 0; }
-  .ad .name { flex: 1 1 120px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .ad a { color: var(--text); text-decoration: none; }
-  .ad a:hover { color: var(--accent); text-decoration: underline; }
+  /* Przelacznik wl/wyl obserwowanego wyszukiwania */
+  .switch { position: relative; display: inline-flex; align-items: center; gap: 8px; cursor: pointer;
+            user-select: none; font-size: .8rem; color: var(--muted); }
+  .switch input { position: absolute; opacity: 0; width: 0; height: 0; }
+  .switch .track { width: 42px; height: 24px; border-radius: 999px; background: #cbd2d9;
+                   transition: background .15s ease; flex-shrink: 0; position: relative; }
+  .switch .track::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+                          border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.25);
+                          transition: transform .15s ease; }
+  .switch input:checked + .track { background: var(--accent); }
+  .switch input:checked + .track::after { transform: translateX(18px); }
+  .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .switch input:disabled + .track { opacity: .5; cursor: wait; }
+  .switch .lbl { min-width: 24px; }
+
   .note { color: var(--muted); font-size: .8rem; padding: 8px 0; }
 
   .empty { color: var(--muted); text-align: center; padding: 22px 0; }
@@ -133,7 +141,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-09-23</span>
+    <span class="app-version">v2026-09-23b</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -223,7 +231,6 @@
 <script>
 const BASE = "https://olx-monitor.maciekwojciechowski03.workers.dev";
 const TOK_KEY = "olx_panel_token";
-const PREVIEW_N = 5;
 
 const $ = (id) => document.getElementById(id);
 let token = localStorage.getItem(TOK_KEY) || "";
@@ -255,34 +262,6 @@ const el = (tag, cls, text) => {
   if (text != null) e.textContent = text;
   return e;
 };
-
-// 5 newest offers this search currently returns
-async function loadPreview(id, box) {
-  box.innerHTML = "";
-  box.appendChild(el("div", "note", "Pobieram najnowsze ogłoszenia…"));
-  try {
-    const ads = await api("GET", "/preview?id=" + encodeURIComponent(id) + "&n=" + PREVIEW_N);
-    box.innerHTML = "";
-    if (!ads || ads.length === 0) {
-      box.appendChild(el("div", "note", "To wyszukiwanie nic teraz nie zwraca."));
-      return;
-    }
-    for (const ad of ads) {
-      const row = el("div", "ad");
-      row.appendChild(el("span", "when", ad.posted));
-      row.appendChild(el("span", "price", ad.price));
-      const name = el("span", "name");
-      const a = el("a", null, ad.title);
-      a.href = ad.url; a.target = "_blank"; a.rel = "noopener";
-      name.appendChild(a);
-      row.appendChild(name);
-      box.appendChild(row);
-    }
-  } catch (e) {
-    box.innerHTML = "";
-    box.appendChild(el("div", "note", "Nie udało się pobrać ogłoszeń: " + e.message));
-  }
-}
 
 // Inline edit of the title and/or the link
 function openEdit(t, block) {
@@ -356,20 +335,47 @@ function render(list) {
       info.querySelector(".t").appendChild(el("span", "badge", "WYŁĄCZONE"));
     }
     const acts = el("div", "acts");
-    const bTog = el("button", "sm " + (t.enabled ? "off" : "on"), t.enabled ? "Wyłącz" : "Włącz");
+
+    // Przelacznik wl/wyl — zastapil przycisk "Wylacz/Wlacz"
+    const sw = el("label", "switch");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !!t.enabled;
+    cb.setAttribute("aria-label", (t.enabled ? "Wyłącz" : "Włącz") + " obserwowanie: " + t.title);
+    const track = el("span", "track");
+    const lbl = el("span", "lbl", t.enabled ? "wł." : "wył.");
+    sw.appendChild(cb); sw.appendChild(track); sw.appendChild(lbl);
+
+    cb.onchange = async () => {
+      const want = cb.checked;
+      cb.disabled = true;
+      try {
+        await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), { enabled: want });
+        t.enabled = want;
+        lbl.textContent = want ? "wł." : "wył.";
+        block.classList.toggle("isoff", !want);
+        const tEl = info.querySelector(".t");
+        const badge = tEl.querySelector(".badge");
+        if (want && badge) badge.remove();
+        if (!want && !badge) tEl.appendChild(el("span", "badge", "WYŁĄCZONE"));
+        showMsg((want ? "Włączono: " : "Wyłączono: ") + t.title, "ok");
+      } catch (e) {
+        cb.checked = !want; // cofnij, skoro serwer nie przyjal zmiany
+        showMsg("Nie udało się zmienić: " + e.message, "err");
+      } finally {
+        cb.disabled = false;
+      }
+    };
+
     const bEdit = el("button", "sm gray", "Edytuj");
     const bDel = el("button", "sm del", "Usuń");
-    acts.appendChild(bTog); acts.appendChild(bEdit); acts.appendChild(bDel);
+    acts.appendChild(sw); acts.appendChild(bEdit); acts.appendChild(bDel);
     head.appendChild(info); head.appendChild(acts);
 
-    bTog.onclick = () => flip(t, { enabled: !t.enabled }, bTog, (t.enabled ? "Wyłączono: " : "Włączono: ") + t.title);
-
     const editBox = el("div", "editbox hidden");
-    const prev = el("div", "prev");
 
     bEdit.onclick = () => {
       head.classList.add("hidden");
-      prev.classList.add("hidden");
       editBox.classList.remove("hidden");
       openEdit(t, editBox);
     };
@@ -377,10 +383,7 @@ function render(list) {
 
     block.appendChild(head);
     block.appendChild(editBox);
-    block.appendChild(prev);
     box.appendChild(block);
-
-    loadPreview(t.id, prev);
   }
 }
 
@@ -402,19 +405,6 @@ async function add() {
     showMsg("Dodano: " + title, "ok");
   } catch (e) { showMsg(e.message, "err"); }
   finally { btn.disabled = false; btn.textContent = "➕ Dodaj do obserwowanych"; }
-}
-
-async function flip(t, patch, btn, okMsg) {
-  const prev = btn.textContent;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spin"></span>';
-  try {
-    render(await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), patch));
-    showMsg(okMsg, "ok");
-  } catch (e) {
-    showMsg(e.message, "err");
-    btn.disabled = false; btn.textContent = prev;
-  }
 }
 
 async function del(t, btn) {
