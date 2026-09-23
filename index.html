@@ -133,7 +133,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-09-09b</span>
+    <span class="app-version">v2026-09-23</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -206,12 +206,14 @@
           <span class="cap" id="soldCap">Sprzedane ogłoszenia</span>
           <span class="barbtns">
             <button id="dlCsv" class="sm">⬇ Pobierz CSV</button>
+            <button id="dlOffers" class="sm">⬇ Pobierz dane ofert</button>
             <button id="refreshSold" class="sm gray">↻ Odśwież</button>
           </span>
         </div>
         <div id="soldList"><div class="empty">Ładowanie…</div></div>
       </div>
-      <p class="foot">Ogłoszenie bez odpowiedzi przez 2 h bot uznaje za sprzedane — automatycznie.</p>
+      <p class="foot">Ogłoszenie bez odpowiedzi przez 2 h bot uznaje za sprzedane — automatycznie.<br>
+      „Pobierz dane ofert” to pełny zbiór: każde obserwowane ogłoszenie ze statusem (sprzedane / wygasło / wciąż aktywne) i liczbą dni dostępności.</p>
     </div>
 
     <p class="foot"><span id="freq">Bot sprawdza OLX co minutę</span> · <a id="clearTok" href="#">zmień token</a></p>
@@ -602,6 +604,32 @@ async function downloadSoldCsv() {
   }
 }
 $("dlCsv").onclick = downloadSoldCsv;
+
+// Pelny zbior danych o ofertach (sprzedane + wygasle + wciaz aktywne, z czasem
+// dostepnosci). Wieksze niz archiwum sprzedanych, wiec dluzszy timeout na UI.
+async function downloadOffersCsv() {
+  const btn = $("dlOffers");
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Pobieram…";
+  try {
+    const res = await fetch(BASE + "/offers.csv", { cache: "no-store", headers: { "X-Panel-Token": token } });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const blob = await res.blob();
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const d = new Date();
+    const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    a.href = u; a.download = "dane_ofert_" + stamp + ".csv";
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(u);
+    showMsg("Pobrano dane ofert.", "ok");
+  } catch (e) {
+    showMsg("Nie udało się pobrać danych ofert: " + e.message, "err");
+  } finally {
+    btn.disabled = false; btn.textContent = prev;
+  }
+}
+$("dlOffers").onclick = downloadOffersCsv;
 
 function openGate() { $("app").classList.add("hidden"); $("gate").classList.remove("hidden"); $("tok").focus(); }
 function openApp() { $("gate").classList.add("hidden"); $("app").classList.remove("hidden"); load(); }
