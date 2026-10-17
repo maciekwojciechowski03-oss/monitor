@@ -144,6 +144,7 @@
   .msgmeta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
   .msgsub { font-size: .8rem; font-weight: 600; color: var(--muted); }
   input.msgnum { width: 72px; padding: 7px 9px; }
+  .msgbtns { display: flex; gap: 8px; }
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
           border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; }
   @keyframes r { to { transform: rotate(360deg); } }
@@ -153,7 +154,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17</span>
+    <span class="app-version">v2026-10-17b</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -178,11 +179,10 @@
       <div class="card">
         <div class="listbar">
           <span class="cap">Wiadomości do sprzedawców (per wyszukiwanie)</span>
-          <button id="refreshQueue" class="sm">⟳ Odśwież wiadomości</button>
         </div>
         <p class="foot" style="text-align:left;margin:2px 0 0">
           Edytuj i <b>Zapisz</b> treści. <code>{OFFER}</code> = cena × %. Przed 17:00 (lub ustawioną godziną) wysyłana wersja „dziś", później „jutro".
-          Kolejka aktualizuje się sama co 5 min — <b>Odśwież wiadomości</b> wymusza natychmiast.
+          Kolejka aktualizuje się sama co 5 min — <b>Odśwież</b> przy danym wyszukiwaniu wymusza natychmiast (tylko to jedno).
         </p>
         <div id="msgList"><div class="empty">Ładowanie…</div></div>
       </div>
@@ -563,6 +563,7 @@ async function loadMsg() {
       rowMeta.append(l1, pct, l2, cut);
       c.appendChild(rowMeta);
 
+      const btns = el("div", "msgbtns");
       const save = el("button", "sm", "Zapisz");
       save.onclick = async () => {
         const prev = save.textContent; save.disabled = true; save.textContent = "Zapisuję…";
@@ -575,7 +576,10 @@ async function loadMsg() {
         } catch (e) { showMsg(e.message, "err"); }
         finally { save.disabled = false; save.textContent = prev; }
       };
-      c.appendChild(save);
+      const refr = el("button", "sm gray", "⟳ Odśwież");
+      refr.onclick = () => refreshQueue(t.id, t.title, refr);
+      btns.append(save, refr);
+      c.appendChild(btns);
       box.appendChild(c);
     }
   } catch (e) {
@@ -583,16 +587,15 @@ async function loadMsg() {
   }
 }
 
-async function refreshQueue() {
-  const btn = $("refreshQueue"); const prev = btn.textContent;
-  btn.disabled = true; btn.textContent = "Odświeżam kolejkę…";
+async function refreshQueue(id, title, btn) {
+  const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Odświeżam…";
   try {
-    const r = await api("GET", "/refresh-queue");
-    showMsg(r && r.ok ? "Kolejka odświeżona — Automa wyśle nowe wiadomości." : "Odświeżono (odpowiedź: " + (r && r.body || "?") + ")", r && r.ok ? "ok" : "err");
+    const r = await api("GET", "/refresh-queue?id=" + encodeURIComponent(id));
+    showMsg(r && r.ok ? "Odświeżono kolejkę: " + title + " — Automa wyśle nowe wiadomości." : "Odpowiedź: " + (r && r.body || "?"), r && r.ok ? "ok" : "err");
   } catch (e) { showMsg("Błąd odświeżania: " + e.message, "err"); }
   finally { btn.disabled = false; btn.textContent = prev; }
 }
-$("refreshQueue").onclick = refreshQueue;
 
 async function loadBlock() {
   const box = $("blockList");
