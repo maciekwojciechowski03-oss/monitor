@@ -181,7 +181,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17e</span>
+    <span class="app-version">v2026-10-17f</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -614,19 +614,22 @@ async function loadMsg() {
       const rowMeta = el("div", "msgmeta");
       const pct = el("input"); pct.type = "number"; pct.min = "1"; pct.max = "100"; pct.value = t.offerPct != null ? t.offerPct : 80; pct.className = "msgnum";
       const cut = el("input"); cut.type = "number"; cut.min = "0"; cut.max = "23"; cut.value = t.cutoffHour != null ? t.cutoffHour : 17; cut.className = "msgnum";
-      const l1 = el("span", "msgsub", "% oferty:"); const l2 = el("span", "msgsub", "godzina dziś→jutro:");
-      rowMeta.append(l1, pct, l2, cut);
+      const aged = el("input"); aged.type = "number"; aged.min = "0"; aged.max = "90"; aged.value = t.agedMinDays != null ? t.agedMinDays : 0; aged.className = "msgnum"; aged.title = "0 = tylko świeże. Np. 3 = pisz też do aktywnych 3–30 dni (prywatni, bez sklepów).";
+      const l1 = el("span", "msgsub", "% oferty:"); const l2 = el("span", "msgsub", "godzina dziś→jutro:"); const l3 = el("span", "msgsub", "starsze ≥ dni (0=nie):");
+      rowMeta.append(l1, pct, l2, cut, l3, aged);
       c.appendChild(rowMeta);
+      const payload = () => ({
+        msgDzis: dzis.value, msgJutro: jutro.value,
+        offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
+        agedMinDays: parseInt(aged.value, 10) || 0,
+      });
 
       const btns = el("div", "msgbtns");
       const save = el("button", "sm", "Zapisz");
       save.onclick = async () => {
         const prev = save.textContent; save.disabled = true; save.textContent = "Zapisuję…";
         try {
-          await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), {
-            msgDzis: dzis.value, msgJutro: jutro.value,
-            offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
-          });
+          await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), payload());
           showMsg("Zapisano: " + t.title, "ok");
         } catch (e) { showMsg(e.message, "err"); }
         finally { save.disabled = false; save.textContent = prev; }
@@ -637,10 +640,7 @@ async function loadMsg() {
         // potem przebuduj kolejke. Jeden klik = zapis + reprice.
         const prev = refr.textContent; refr.disabled = true; save.disabled = true; refr.textContent = "Zapisuję…";
         try {
-          await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), {
-            msgDzis: dzis.value, msgJutro: jutro.value,
-            offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
-          });
+          await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), payload());
         } catch (e) { showMsg("Błąd zapisu: " + e.message, "err"); refr.disabled = false; save.disabled = false; refr.textContent = prev; return; }
         refr.textContent = prev;
         await refreshQueue(t.id, t.title, refr);
