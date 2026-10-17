@@ -169,6 +169,9 @@
                 color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 9px; margin-top: 6px; }
   .rule .rulebar { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
   .rule summary { cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--muted); }
+  .rulesio { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .rulesio .imp-mode { font-size: .78rem; font-weight: 600; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; margin: 0; }
+  .rulesio .imp-mode input { width: auto; }
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
           border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; }
   @keyframes r { to { transform: rotate(360deg); } }
@@ -178,7 +181,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17d</span>
+    <span class="app-version">v2026-10-17e</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -289,6 +292,12 @@
       Reguła dla konkretnej wersji: ustaw warunki (np. Model + Pamięć), <b>sztywną cenę</b> (wstawi się w <code>{OFFER}</code>) i/lub <b>własną wiadomość</b>.
       Pierwsza pasująca reguła wygrywa. Gdy nic nie pasuje → zwykła wiadomość z <code>{OFFER}</code> = cena × %.
     </p>
+    <div class="rulesio">
+      <button id="rulesTemplate" class="sm gray">⬇ Szablon do wyceny</button>
+      <button id="rulesImport" class="sm gray">⬆ Importuj plik</button>
+      <input id="rulesFile" type="file" accept=".json,application/json" style="display:none" />
+      <label class="imp-mode"><input type="checkbox" id="rulesReplace" checked /> zastąp istniejące</label>
+    </div>
     <div id="rulesBody"><div class="empty">Ładowanie…</div></div>
     <div class="modal-foot">
       <button id="rulesAdd" class="sm">➕ dodaj regułę</button>
@@ -770,6 +779,96 @@ $("rulesClose").onclick = () => $("rulesModal").classList.add("hidden");
 $("rulesAdd").onclick = () => { const b = $("rulesBody"); const n = b.querySelector(".empty"); if (n) n.remove(); b.appendChild(ruleCard(null)); };
 $("rulesSave").onclick = saveRules;
 $("rulesModal").onclick = (e) => { if (e.target === $("rulesModal")) $("rulesModal").classList.add("hidden"); };
+
+// Mapowanie przyjaznych nazw (iPhone) na klucze parametrów OLX.
+const FRIENDLY2KEY = { model: "phonemodel", pamiec: "builtinmemory_phones", stan: "state" };
+
+function downloadText(name, text) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+  a.download = name; document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+}
+
+// Pobierz szablon do wyceny: dokładne wartości parametrów z OLX + przykład reguły.
+function rulesTemplate() {
+  const byKey = {};
+  rulesState.facets.forEach((f) => { byKey[f.key] = f.values; });
+  const tpl = {
+    wyszukiwanie: ($("rulesTitle").textContent || "").replace("Sztywne ceny — ", ""),
+    opis: "Wypełnij 'reguly': dla każdej wersji podaj 'cena' (sztywna kwota do zaproponowania). 'model'/'pamiec' MUSZĄ być dokładnie jak w 'dostepne'. 'stan' opcjonalnie. Można dodać 'wiadomoscDzis'/'wiadomoscJutro'.",
+    dostepne: {
+      model: byKey["phonemodel"] || [],
+      pamiec: byKey["builtinmemory_phones"] || [],
+      stan: byKey["state"] || [],
+    },
+    reguly: [
+      { model: (byKey["phonemodel"] || [""])[0] || "iPhone 15 Pro", pamiec: (byKey["builtinmemory_phones"] || [""])[0] || "256GB", cena: 0 },
+    ],
+  };
+  downloadText("reguly-" + (tpl.wyszukiwanie || "wyszukiwanie").replace(/\s+/g, "_") + "-szablon.json", JSON.stringify(tpl, null, 2));
+  showMsg("Pobrano szablon — wypełnij 'cena' i zaimportuj.", "ok");
+}
+
+// Zamień zaimportowany JSON na wewnętrzne reguły {match, price, msgDzis, msgJutro}.
+function parseImport(obj) {
+  let arr = [];
+  if (Array.isArray(obj)) arr = obj;
+  else if (Array.isArray(obj.priceRules)) {
+    return obj.priceRules.filter((r) => r && r.match && Object.keys(r.match).length);
+  } else if (Array.isArray(obj.reguly)) arr = obj.reguly;
+  else throw new Error("Nieznany format pliku (oczekuję 'reguly' lub listy).");
+  const out = [];
+  for (const row of arr) {
+    if (!row || typeof row !== "object") continue;
+    const match = {};
+    // przyjazne klucze
+    for (const fk in FRIENDLY2KEY) {
+      if (row[fk] != null && String(row[fk]).trim() !== "") match[FRIENDLY2KEY[fk]] = String(row[fk]).trim();
+    }
+    // albo surowe klucze parametrów (dla innych kategorii)
+    if (row.match && typeof row.match === "object") {
+      for (const k in row.match) if (row.match[k] != null && String(row.match[k]).trim() !== "") match[k] = String(row.match[k]).trim();
+    }
+    if (!Object.keys(match).length) continue;
+    const rule = { match };
+    const cena = row.cena != null ? row.cena : row.price;
+    if (cena != null && String(cena).trim() !== "" && !isNaN(parseInt(cena, 10))) rule.price = parseInt(cena, 10);
+    const dz = row.wiadomoscDzis != null ? row.wiadomoscDzis : row.msgDzis;
+    const ju = row.wiadomoscJutro != null ? row.wiadomoscJutro : row.msgJutro;
+    if (dz && String(dz).trim()) rule.msgDzis = String(dz);
+    if (ju && String(ju).trim()) rule.msgJutro = String(ju);
+    out.push(rule);
+  }
+  return out;
+}
+
+function importRules(text) {
+  let obj;
+  try { obj = JSON.parse(text); } catch (e) { showMsg("Plik nie jest poprawnym JSON.", "err"); return; }
+  let rules;
+  try { rules = parseImport(obj); } catch (e) { showMsg(e.message, "err"); return; }
+  if (!rules.length) { showMsg("W pliku nie ma żadnych reguł z ceną/warunkami.", "err"); return; }
+  // ostrzeżenie o wartościach spoza OLX (nie trafią)
+  const known = {}; rulesState.facets.forEach((f) => { known[f.key] = new Set(f.values); });
+  let warn = 0;
+  rules.forEach((r) => { for (const k in r.match) { if (known[k] && !known[k].has(r.match[k])) warn++; } });
+  const body = $("rulesBody");
+  const replace = $("rulesReplace").checked;
+  if (replace) body.innerHTML = "";
+  else { const n = body.querySelector(".empty"); if (n) n.remove(); }
+  rules.forEach((r) => body.appendChild(ruleCard(r)));
+  showMsg("Wczytano " + rules.length + " reguł" + (warn ? " (uwaga: " + warn + " wartości nie pasuje do OLX — sprawdź pisownię)" : "") + ". Teraz kliknij Zapisz reguły.", warn ? "err" : "ok");
+}
+
+$("rulesTemplate").onclick = rulesTemplate;
+$("rulesImport").onclick = () => $("rulesFile").click();
+$("rulesFile").onchange = (e) => {
+  const f = e.target.files && e.target.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => { importRules(String(r.result || "")); e.target.value = ""; };
+  r.readAsText(f);
+};
 
 async function loadBlock() {
   const box = $("blockList");
