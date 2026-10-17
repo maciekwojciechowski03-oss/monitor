@@ -132,6 +132,18 @@
   .foot { text-align: center; color: var(--muted); font-size: .78rem; margin-top: 8px; }
   .foot a { color: var(--muted); }
   .hidden { display: none !important; }
+
+  /* Wiadomości */
+  .msgcard { border: 1px solid var(--line); border-radius: 12px; padding: 14px; margin-bottom: 14px; background: var(--card); }
+  .msghead { margin-bottom: 10px; }
+  .msghead .t { font-weight: 700; font-size: .98rem; }
+  .msglbl { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin: 8px 0 4px; }
+  .msgta { width: 100%; min-height: 76px; resize: vertical; padding: 10px 12px; font: inherit; font-size: 14px;
+           color: var(--text); background: var(--bg); border: 1px solid var(--line); border-radius: 10px; outline: none; }
+  .msgta:focus { border-color: var(--accent); }
+  .msgmeta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+  .msgsub { font-size: .8rem; font-weight: 600; color: var(--muted); }
+  input.msgnum { width: 72px; padding: 7px 9px; }
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
           border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; }
   @keyframes r { to { transform: rotate(360deg); } }
@@ -141,7 +153,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-09-23b</span>
+    <span class="app-version">v2026-10-17</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -157,8 +169,23 @@
 
     <div class="tabs">
       <button id="tabSearch" class="tab active">Obserwowane</button>
+      <button id="tabMsg" class="tab">Wiadomości</button>
       <button id="tabSold" class="tab">Sprzedane</button>
       <button id="tabBlock" class="tab">Zablokowani</button>
+    </div>
+
+    <div id="view-msg" class="hidden">
+      <div class="card">
+        <div class="listbar">
+          <span class="cap">Wiadomości do sprzedawców (per wyszukiwanie)</span>
+          <button id="refreshQueue" class="sm">⟳ Odśwież wiadomości</button>
+        </div>
+        <p class="foot" style="text-align:left;margin:2px 0 0">
+          Edytuj i <b>Zapisz</b> treści. <code>{OFFER}</code> = cena × %. Przed 17:00 (lub ustawioną godziną) wysyłana wersja „dziś", później „jutro".
+          Kolejka aktualizuje się sama co 5 min — <b>Odśwież wiadomości</b> wymusza natychmiast.
+        </p>
+        <div id="msgList"><div class="empty">Ładowanie…</div></div>
+      </div>
     </div>
 
     <div id="view-search">
@@ -490,19 +517,82 @@ async function loadSold() {
 
 function showTab(which) {
   $("view-search").classList.toggle("hidden", which !== "search");
+  $("view-msg").classList.toggle("hidden", which !== "msg");
   $("view-sold").classList.toggle("hidden", which !== "sold");
   $("view-block").classList.toggle("hidden", which !== "block");
   $("tabSearch").classList.toggle("active", which === "search");
+  $("tabMsg").classList.toggle("active", which === "msg");
   $("tabSold").classList.toggle("active", which === "sold");
   $("tabBlock").classList.toggle("active", which === "block");
+  if (which === "msg") loadMsg();
   if (which === "sold") loadSold();
   if (which === "block") loadBlock();
 }
 $("tabSearch").onclick = () => showTab("search");
+$("tabMsg").onclick = () => showTab("msg");
 $("tabSold").onclick = () => showTab("sold");
 $("tabBlock").onclick = () => showTab("block");
 $("refreshSold").onclick = () => loadSold();
 $("refreshBlock").onclick = () => loadBlock();
+
+// --- Wiadomości (per wyszukiwanie) ---
+async function loadMsg() {
+  const box = $("msgList");
+  box.innerHTML = '<div class="empty">Ładowanie…</div>';
+  try {
+    const targets = await api("GET", "/targets");
+    box.innerHTML = "";
+    if (!targets.length) { box.innerHTML = '<div class="empty">Brak wyszukiwań.</div>'; return; }
+    for (const t of targets) {
+      const c = el("div", "msgcard");
+      const head = el("div", "msghead");
+      head.appendChild(el("span", "t", t.title + (t.enabled ? "" : " (wyłączone)")));
+      c.appendChild(head);
+
+      const dzis = el("textarea", "msgta"); dzis.value = t.msgDzis || ""; dzis.placeholder = 'Wiadomość "dziś" — użyj {OFFER}';
+      const jutro = el("textarea", "msgta"); jutro.value = t.msgJutro || ""; jutro.placeholder = 'Wiadomość "jutro" — użyj {OFFER}';
+      c.appendChild(el("label", "msglbl", 'Wiadomość "dziś"'));
+      c.appendChild(dzis);
+      c.appendChild(el("label", "msglbl", 'Wiadomość "jutro"'));
+      c.appendChild(jutro);
+
+      const rowMeta = el("div", "msgmeta");
+      const pct = el("input"); pct.type = "number"; pct.min = "1"; pct.max = "100"; pct.value = t.offerPct != null ? t.offerPct : 80; pct.className = "msgnum";
+      const cut = el("input"); cut.type = "number"; cut.min = "0"; cut.max = "23"; cut.value = t.cutoffHour != null ? t.cutoffHour : 17; cut.className = "msgnum";
+      const l1 = el("span", "msgsub", "% oferty:"); const l2 = el("span", "msgsub", "godzina dziś→jutro:");
+      rowMeta.append(l1, pct, l2, cut);
+      c.appendChild(rowMeta);
+
+      const save = el("button", "sm", "Zapisz");
+      save.onclick = async () => {
+        const prev = save.textContent; save.disabled = true; save.textContent = "Zapisuję…";
+        try {
+          await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), {
+            msgDzis: dzis.value, msgJutro: jutro.value,
+            offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
+          });
+          showMsg("Zapisano: " + t.title, "ok");
+        } catch (e) { showMsg(e.message, "err"); }
+        finally { save.disabled = false; save.textContent = prev; }
+      };
+      c.appendChild(save);
+      box.appendChild(c);
+    }
+  } catch (e) {
+    box.innerHTML = ""; box.appendChild(el("div", "note", "Nie udało się pobrać: " + e.message));
+  }
+}
+
+async function refreshQueue() {
+  const btn = $("refreshQueue"); const prev = btn.textContent;
+  btn.disabled = true; btn.textContent = "Odświeżam kolejkę…";
+  try {
+    const r = await api("GET", "/refresh-queue");
+    showMsg(r && r.ok ? "Kolejka odświeżona — Automa wyśle nowe wiadomości." : "Odświeżono (odpowiedź: " + (r && r.body || "?") + ")", r && r.ok ? "ok" : "err");
+  } catch (e) { showMsg("Błąd odświeżania: " + e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
+}
+$("refreshQueue").onclick = refreshQueue;
 
 async function loadBlock() {
   const box = $("blockList");
