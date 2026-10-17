@@ -145,6 +145,30 @@
   .msgsub { font-size: .8rem; font-weight: 600; color: var(--muted); }
   input.msgnum { width: 72px; padding: 7px 9px; }
   .msgbtns { display: flex; gap: 8px; }
+  .msghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  button.pencil { background: transparent; color: var(--accent); padding: 4px 6px; font-size: .82rem; font-weight: 600; flex-shrink: 0; }
+  button.pencil:hover { background: var(--soft); }
+
+  /* Modal reguł */
+  .modal { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: flex-start;
+           justify-content: center; padding: 24px 12px; z-index: 50; overflow-y: auto; }
+  .modal-box { background: var(--card); border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--shadow);
+               padding: 16px; width: 100%; max-width: 640px; }
+  .modal-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .modal-head #rulesTitle { font-weight: 700; font-size: 1.02rem; }
+  .modal-foot { display: flex; gap: 8px; justify-content: space-between; margin-top: 12px; }
+  .rule { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 12px; background: var(--bg); }
+  .rule .cond { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; flex-wrap: wrap; }
+  .rule select { flex: 1 1 140px; min-width: 120px; padding: 8px 9px; font: inherit; font-size: 14px; color: var(--text);
+                 background: var(--card); border: 1px solid var(--line); border-radius: 9px; }
+  .rule .xcond { background: transparent; color: var(--danger); padding: 4px 8px; font-weight: 700; }
+  .rule .addcond { background: transparent; color: var(--accent); padding: 2px 0; font-size: .8rem; font-weight: 600; }
+  .rule .rprice { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+  .rule .rprice input { width: 110px; padding: 7px 9px; }
+  .rule .rmsg { width: 100%; min-height: 56px; resize: vertical; padding: 8px 10px; font: inherit; font-size: 13px;
+                color: var(--text); background: var(--card); border: 1px solid var(--line); border-radius: 9px; margin-top: 6px; }
+  .rule .rulebar { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; }
+  .rule summary { cursor: pointer; font-size: .82rem; font-weight: 600; color: var(--muted); }
   .spin { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4);
           border-top-color: #fff; border-radius: 50%; animation: r .7s linear infinite; vertical-align: -2px; }
   @keyframes r { to { transform: rotate(360deg); } }
@@ -154,7 +178,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17c</span>
+    <span class="app-version">v2026-10-17d</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -252,6 +276,24 @@
     </div>
 
     <p class="foot"><span id="freq">Bot sprawdza OLX co minutę</span> · <a id="clearTok" href="#">zmień token</a></p>
+  </div>
+</div>
+
+<div id="rulesModal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span id="rulesTitle">Sztywne ceny / wiadomości</span>
+      <button id="rulesClose" class="sm gray">✕</button>
+    </div>
+    <p class="foot" style="text-align:left;margin:0 0 10px">
+      Reguła dla konkretnej wersji: ustaw warunki (np. Model + Pamięć), <b>sztywną cenę</b> (wstawi się w <code>{OFFER}</code>) i/lub <b>własną wiadomość</b>.
+      Pierwsza pasująca reguła wygrywa. Gdy nic nie pasuje → zwykła wiadomość z <code>{OFFER}</code> = cena × %.
+    </p>
+    <div id="rulesBody"><div class="empty">Ładowanie…</div></div>
+    <div class="modal-foot">
+      <button id="rulesAdd" class="sm">➕ dodaj regułę</button>
+      <button id="rulesSave" class="sm">Zapisz reguły</button>
+    </div>
   </div>
 </div>
 
@@ -547,6 +589,10 @@ async function loadMsg() {
       const c = el("div", "msgcard");
       const head = el("div", "msghead");
       head.appendChild(el("span", "t", t.title + (t.enabled ? "" : " (wyłączone)")));
+      const nRules = Array.isArray(t.priceRules) ? t.priceRules.length : 0;
+      const pencil = el("button", "pencil", "✏️ Sztywne ceny" + (nRules ? " (" + nRules + ")" : ""));
+      pencil.onclick = () => openRules(t);
+      head.appendChild(pencil);
       c.appendChild(head);
 
       const dzis = el("textarea", "msgta"); dzis.value = t.msgDzis || ""; dzis.placeholder = 'Wiadomość "dziś" — użyj {OFFER}';
@@ -609,6 +655,121 @@ async function refreshQueue(id, title, btn) {
   } catch (e) { showMsg("Błąd odświeżania: " + e.message, "err"); }
   finally { btn.disabled = false; btn.textContent = prev; }
 }
+
+// --- Reguły sztywnych cen / wiadomości (modal ✏️) ---
+let rulesState = { id: null, facets: [] };
+
+async function openRules(t) {
+  rulesState = { id: t.id, facets: [] };
+  $("rulesTitle").textContent = "Sztywne ceny — " + t.title;
+  const body = $("rulesBody");
+  body.innerHTML = '<div class="empty">Ładowanie parametrów…</div>';
+  $("rulesModal").classList.remove("hidden");
+  try { rulesState.facets = await api("GET", "/facets?id=" + encodeURIComponent(t.id)) || []; }
+  catch (e) { rulesState.facets = []; }
+  body.innerHTML = "";
+  if (!rulesState.facets.length) {
+    body.appendChild(el("div", "note", "Nie udało się pobrać parametrów tego wyszukiwania (za mało ogłoszeń?). Reguły działają po parametrach OLX — spróbuj później."));
+  }
+  const rules = Array.isArray(t.priceRules) ? t.priceRules : [];
+  if (!rules.length) body.appendChild(ruleCard(null));
+  else rules.forEach((r) => body.appendChild(ruleCard(r)));
+}
+
+// jeden warunek: [parametr ▾][wartość ▾][✕]
+function condRow(key, value) {
+  const row = el("div", "cond");
+  const fsel = document.createElement("select");
+  fsel.appendChild(new Option("— parametr —", ""));
+  rulesState.facets.forEach((f) => fsel.appendChild(new Option(f.name, f.key)));
+  if (key && !rulesState.facets.some((f) => f.key === key)) fsel.appendChild(new Option(key, key));
+  fsel.value = key || "";
+  const vsel = document.createElement("select");
+  const fillV = (fk, cur) => {
+    vsel.innerHTML = "";
+    vsel.appendChild(new Option("— dowolne —", ""));
+    const f = rulesState.facets.find((x) => x.key === fk);
+    if (f) f.values.forEach((v) => vsel.appendChild(new Option(v, v)));
+    if (cur && (!f || !f.values.includes(cur))) vsel.appendChild(new Option(cur, cur));
+    vsel.value = cur || "";
+  };
+  fillV(key, value);
+  fsel.onchange = () => fillV(fsel.value, "");
+  const x = el("button", "xcond", "✕"); x.title = "usuń warunek";
+  x.onclick = () => row.remove();
+  row.append(fsel, vsel, x);
+  return row;
+}
+
+function ruleCard(r) {
+  const card = el("div", "rule");
+  const conds = el("div", "conds");
+  const match = (r && r.match) || {};
+  const keys = Object.keys(match);
+  if (!keys.length) conds.appendChild(condRow("", ""));
+  else keys.forEach((k) => conds.appendChild(condRow(k, match[k])));
+  card.appendChild(conds);
+  const addc = el("button", "addcond", "+ warunek");
+  addc.onclick = () => conds.appendChild(condRow("", ""));
+  card.appendChild(addc);
+
+  const pr = el("div", "rprice");
+  pr.appendChild(el("span", "msgsub", "Sztywna cena {OFFER}:"));
+  const price = document.createElement("input"); price.type = "number"; price.min = "0"; price.placeholder = "np. 2500"; price.className = "msgnum";
+  if (r && r.price != null) price.value = r.price;
+  pr.appendChild(price); pr.appendChild(el("span", "msgsub", "zł (puste = % z ceny)"));
+  card.appendChild(pr);
+
+  const det = document.createElement("details");
+  const sum = document.createElement("summary"); sum.textContent = "Własna wiadomość (opcjonalnie)";
+  det.appendChild(sum);
+  const dz = el("textarea", "rmsg"); dz.placeholder = 'Wiadomość "dziś" dla tej wersji — {OFFER} działa'; if (r && r.msgDzis) dz.value = r.msgDzis;
+  const ju = el("textarea", "rmsg"); ju.placeholder = 'Wiadomość "jutro" dla tej wersji'; if (r && r.msgJutro) ju.value = r.msgJutro;
+  if (r && (r.msgDzis || r.msgJutro)) det.open = true;
+  det.append(dz, ju);
+  card.appendChild(det);
+
+  const bar = el("div", "rulebar");
+  bar.appendChild(el("span", "msgsub", "pierwsza pasująca wygrywa"));
+  const del = el("button", "sm del", "usuń regułę");
+  del.onclick = () => card.remove();
+  bar.appendChild(del);
+  card.appendChild(bar);
+
+  card._collect = () => {
+    const m = {};
+    conds.querySelectorAll(".cond").forEach((row) => {
+      const sels = row.querySelectorAll("select");
+      const k = sels[0].value, v = sels[1].value;
+      if (k && v) m[k] = v;
+    });
+    if (!Object.keys(m).length) return null; // reguła bez warunków -> pomijamy
+    const out = { match: m };
+    if (price.value !== "" && !isNaN(parseInt(price.value, 10))) out.price = parseInt(price.value, 10);
+    if (dz.value.trim()) out.msgDzis = dz.value;
+    if (ju.value.trim()) out.msgJutro = ju.value;
+    return out;
+  };
+  return card;
+}
+
+async function saveRules() {
+  const btn = $("rulesSave"); const prev = btn.textContent; btn.disabled = true; btn.textContent = "Zapisuję…";
+  try {
+    const rules = [];
+    $("rulesBody").querySelectorAll(".rule").forEach((c) => { const r = c._collect && c._collect(); if (r) rules.push(r); });
+    await api("PATCH", "/targets?id=" + encodeURIComponent(rulesState.id), { priceRules: rules });
+    showMsg("Zapisano reguły: " + rules.length, "ok");
+    $("rulesModal").classList.add("hidden");
+    loadMsg();
+  } catch (e) { showMsg(e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
+}
+
+$("rulesClose").onclick = () => $("rulesModal").classList.add("hidden");
+$("rulesAdd").onclick = () => { const b = $("rulesBody"); const n = b.querySelector(".empty"); if (n) n.remove(); b.appendChild(ruleCard(null)); };
+$("rulesSave").onclick = saveRules;
+$("rulesModal").onclick = (e) => { if (e.target === $("rulesModal")) $("rulesModal").classList.add("hidden"); };
 
 async function loadBlock() {
   const box = $("blockList");
