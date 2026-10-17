@@ -154,7 +154,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17b</span>
+    <span class="app-version">v2026-10-17c</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -576,8 +576,21 @@ async function loadMsg() {
         } catch (e) { showMsg(e.message, "err"); }
         finally { save.disabled = false; save.textContent = prev; }
       };
-      const refr = el("button", "sm gray", "⟳ Odśwież");
-      refr.onclick = () => refreshQueue(t.id, t.title, refr);
+      const refr = el("button", "sm gray", "⟳ Zapisz i odśwież");
+      refr.onclick = async () => {
+        // Najpierw ZAPISZ aktualne pola (zeby odswiezenie szlo z nowym % / trescia),
+        // potem przebuduj kolejke. Jeden klik = zapis + reprice.
+        const prev = refr.textContent; refr.disabled = true; save.disabled = true; refr.textContent = "Zapisuję…";
+        try {
+          await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), {
+            msgDzis: dzis.value, msgJutro: jutro.value,
+            offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
+          });
+        } catch (e) { showMsg("Błąd zapisu: " + e.message, "err"); refr.disabled = false; save.disabled = false; refr.textContent = prev; return; }
+        refr.textContent = prev;
+        await refreshQueue(t.id, t.title, refr);
+        save.disabled = false;
+      };
       btns.append(save, refr);
       c.appendChild(btns);
       box.appendChild(c);
