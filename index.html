@@ -145,6 +145,7 @@
   .msgsub { font-size: .8rem; font-weight: 600; color: var(--muted); }
   input.msgnum { width: 72px; padding: 7px 9px; }
   .msgbtns { display: flex; gap: 8px; }
+  .agedsep { margin: 16px 0 8px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: .82rem; font-weight: 700; color: var(--muted); }
   .msghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   button.pencil { background: transparent; color: var(--accent); padding: 4px 6px; font-size: .82rem; font-weight: 600; flex-shrink: 0; }
   button.pencil:hover { background: var(--soft); }
@@ -181,7 +182,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17f</span>
+    <span class="app-version">v2026-10-17g</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -614,14 +615,45 @@ async function loadMsg() {
       const rowMeta = el("div", "msgmeta");
       const pct = el("input"); pct.type = "number"; pct.min = "1"; pct.max = "100"; pct.value = t.offerPct != null ? t.offerPct : 80; pct.className = "msgnum";
       const cut = el("input"); cut.type = "number"; cut.min = "0"; cut.max = "23"; cut.value = t.cutoffHour != null ? t.cutoffHour : 17; cut.className = "msgnum";
-      const aged = el("input"); aged.type = "number"; aged.min = "0"; aged.max = "90"; aged.value = t.agedMinDays != null ? t.agedMinDays : 0; aged.className = "msgnum"; aged.title = "0 = tylko świeże. Np. 3 = pisz też do aktywnych 3–30 dni (prywatni, bez sklepów).";
-      const l1 = el("span", "msgsub", "% oferty:"); const l2 = el("span", "msgsub", "godzina dziś→jutro:"); const l3 = el("span", "msgsub", "starsze ≥ dni (0=nie):");
-      rowMeta.append(l1, pct, l2, cut, l3, aged);
+      const l1 = el("span", "msgsub", "% oferty:"); const l2 = el("span", "msgsub", "godzina dziś→jutro:");
+      rowMeta.append(l1, pct, l2, cut);
       c.appendChild(rowMeta);
+
+      // --- Tor "czy aktualne?" (starsze ogłoszenia, osobna kolejka + grupa wysłanych) ---
+      c.appendChild(el("div", "agedsep", 'Tor „czy aktualne?" — starsze ogłoszenia'));
+      const agedMin = el("input"); agedMin.type = "number"; agedMin.min = "0"; agedMin.max = "90"; agedMin.value = t.agedMinDays != null ? t.agedMinDays : 0; agedMin.className = "msgnum"; agedMin.title = "0 = wyłączone (nie pisz do starszych).";
+      const agedMax = el("input"); agedMax.type = "number"; agedMax.min = "1"; agedMax.max = "90"; agedMax.value = t.agedMaxDays != null ? t.agedMaxDays : 5; agedMax.className = "msgnum";
+      const aRow = el("div", "msgmeta");
+      aRow.append(el("span", "msgsub", "pisz do aktywnych: od"), agedMin, el("span", "msgsub", "do"), agedMax, el("span", "msgsub", "dni  (od = 0 → wyłączone)"));
+      c.appendChild(aRow);
+      const aDzis = el("textarea", "msgta"); aDzis.value = t.agedMsgDzis || ""; aDzis.placeholder = 'Starsze „dziś" — np. Dzień dobry, czy to ogłoszenie jest jeszcze aktualne?';
+      const aJutro = el("textarea", "msgta"); aJutro.value = t.agedMsgJutro || ""; aJutro.placeholder = 'Starsze „jutro"';
+      c.appendChild(el("label", "msglbl", 'Wiadomość do starszych „dziś"')); c.appendChild(aDzis);
+      c.appendChild(el("label", "msglbl", 'Wiadomość do starszych „jutro"')); c.appendChild(aJutro);
+      const cntRow = el("div", "msgmeta");
+      const cntBtn = el("button", "sm gray", "🔢 Ile w oknie?");
+      const cntOut = el("span", "msgsub", "");
+      cntBtn.onclick = async () => {
+        const pv = cntBtn.textContent; cntBtn.disabled = true; cntBtn.textContent = "Liczę…"; cntOut.textContent = "";
+        try {
+          const mn = parseInt(agedMin.value, 10) || 0, mx = parseInt(agedMax.value, 10) || 5;
+          if (!mn) { cntOut.textContent = "(tor wyłączony — ustaw „od” > 0)"; }
+          else {
+            const list = await api("GET", "/aged?id=" + encodeURIComponent(t.id) + "&minDni=" + mn + "&maxDni=" + mx + "&max=200");
+            cntOut.textContent = "≈ " + list.length + " ogłoszeń (" + mn + "–" + mx + " dni; przed odjęciem już wysłanych)";
+          }
+        } catch (e) { cntOut.textContent = "błąd: " + e.message; }
+        finally { cntBtn.disabled = false; cntBtn.textContent = pv; }
+      };
+      cntRow.append(cntBtn, cntOut);
+      c.appendChild(cntRow);
+
       const payload = () => ({
         msgDzis: dzis.value, msgJutro: jutro.value,
         offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
-        agedMinDays: parseInt(aged.value, 10) || 0,
+        agedMinDays: parseInt(agedMin.value, 10) || 0,
+        agedMaxDays: parseInt(agedMax.value, 10) || 5,
+        agedMsgDzis: aDzis.value, agedMsgJutro: aJutro.value,
       });
 
       const btns = el("div", "msgbtns");
