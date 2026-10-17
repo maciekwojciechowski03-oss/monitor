@@ -182,7 +182,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-17g</span>
+    <span class="app-version">v2026-10-18</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -639,8 +639,15 @@ async function loadMsg() {
           const mn = parseInt(agedMin.value, 10) || 0, mx = parseInt(agedMax.value, 10) || 5;
           if (!mn) { cntOut.textContent = "(tor wyłączony — ustaw „od” > 0)"; }
           else {
-            const list = await api("GET", "/aged?id=" + encodeURIComponent(t.id) + "&minDni=" + mn + "&maxDni=" + mx + "&max=200");
-            cntOut.textContent = "≈ " + list.length + " ogłoszeń (" + mn + "–" + mx + " dni; przed odjęciem już wysłanych)";
+            // /aged-count = w oknie MINUS juz wyslane (realne "do ilu napisze")
+            const r = await api("GET", "/aged-count?id=" + encodeURIComponent(t.id) + "&minDni=" + mn + "&maxDni=" + mx);
+            if (r && r.ok) {
+              cntOut.textContent = "napiszemy do ≈ " + r.fresh + " (nowych) z " + r.total + " w oknie " + mn + "–" + mx + " dni — reszta już wysłana";
+            } else {
+              // fallback: samo okno (gdy Apps Script jeszcze nie wdrozony)
+              const list = await api("GET", "/aged?id=" + encodeURIComponent(t.id) + "&minDni=" + mn + "&maxDni=" + mx + "&max=200");
+              cntOut.textContent = "≈ " + list.length + " w oknie " + mn + "–" + mx + " dni (wdróż Apps Script, by odjąć już wysłane)";
+            }
           }
         } catch (e) { cntOut.textContent = "błąd: " + e.message; }
         finally { cntBtn.disabled = false; cntBtn.textContent = pv; }
