@@ -184,7 +184,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-21</span>
+    <span class="app-version">v2026-10-21b</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -612,7 +612,8 @@ async function loadMsg() {
       const notifySel = document.createElement("select"); notifySel.className = "msgsel";
       notifySel.appendChild(new Option("Wszystkie", "all"));
       notifySel.appendChild(new Option("Tylko okazje (cena ≤ reguła modelu)", "deals"));
-      notifySel.value = t.notifyMode === "deals" ? "deals" : "all";
+      notifySel.appendChild(new Option("Wyłączone (cisza)", "off"));
+      notifySel.value = ["deals", "off"].includes(t.notifyMode) ? t.notifyMode : "all";
       notifyRow.append(el("span", "msgsub", "🔔 Powiadomienia Slack:"), notifySel);
       c.appendChild(notifyRow);
 
