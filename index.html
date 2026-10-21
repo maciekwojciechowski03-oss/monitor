@@ -144,6 +144,8 @@
   .msgmeta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
   .msgsub { font-size: .8rem; font-weight: 600; color: var(--muted); }
   input.msgnum { width: 72px; padding: 7px 9px; }
+  select.msgsel { padding: 7px 9px; font: inherit; font-size: 14px; color: var(--text);
+                  background: var(--card); border: 1px solid var(--line); border-radius: 9px; }
   .msgbtns { display: flex; gap: 8px; }
   .agedsep { margin: 16px 0 8px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: .82rem; font-weight: 700; color: var(--muted); }
   .msghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -182,7 +184,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-18</span>
+    <span class="app-version">v2026-10-21</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -605,6 +607,15 @@ async function loadMsg() {
       head.appendChild(pencil);
       c.appendChild(head);
 
+      // Przelacznik powiadomien Slack (per wyszukiwanie)
+      const notifyRow = el("div", "msgmeta");
+      const notifySel = document.createElement("select"); notifySel.className = "msgsel";
+      notifySel.appendChild(new Option("Wszystkie", "all"));
+      notifySel.appendChild(new Option("Tylko okazje (cena ≤ reguła modelu)", "deals"));
+      notifySel.value = t.notifyMode === "deals" ? "deals" : "all";
+      notifyRow.append(el("span", "msgsub", "🔔 Powiadomienia Slack:"), notifySel);
+      c.appendChild(notifyRow);
+
       const dzis = el("textarea", "msgta"); dzis.value = t.msgDzis || ""; dzis.placeholder = 'Wiadomość "dziś" — użyj {OFFER}';
       const jutro = el("textarea", "msgta"); jutro.value = t.msgJutro || ""; jutro.placeholder = 'Wiadomość "jutro" — użyj {OFFER}';
       c.appendChild(el("label", "msglbl", 'Wiadomość "dziś"'));
@@ -661,6 +672,7 @@ async function loadMsg() {
         agedMinDays: parseInt(agedMin.value, 10) || 0,
         agedMaxDays: parseInt(agedMax.value, 10) || 5,
         agedMsgDzis: aDzis.value, agedMsgJutro: aJutro.value,
+        notifyMode: notifySel.value,
       });
 
       const btns = el("div", "msgbtns");
