@@ -184,7 +184,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-21b</span>
+    <span class="app-version">v2026-10-22</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -614,7 +614,8 @@ async function loadMsg() {
       notifySel.appendChild(new Option("Tylko okazje (cena ≤ reguła modelu)", "deals"));
       notifySel.appendChild(new Option("Wyłączone (cisza)", "off"));
       notifySel.value = ["deals", "off"].includes(t.notifyMode) ? t.notifyMode : "all";
-      notifyRow.append(el("span", "msgsub", "🔔 Powiadomienia Slack:"), notifySel);
+      const notifyMargin = el("input"); notifyMargin.type = "number"; notifyMargin.min = "0"; notifyMargin.step = "50"; notifyMargin.value = t.notifyMarginZl != null ? t.notifyMarginZl : 0; notifyMargin.className = "msgnum"; notifyMargin.title = "Tryb okazje: powiadom też, gdy cena jest do tylu zł POWYŻEJ reguły (margines negocjacyjny).";
+      notifyRow.append(el("span", "msgsub", "🔔 Powiadomienia Slack:"), notifySel, el("span", "msgsub", "margines +"), notifyMargin, el("span", "msgsub", "zł powyżej reguły"));
       c.appendChild(notifyRow);
 
       const dzis = el("textarea", "msgta"); dzis.value = t.msgDzis || ""; dzis.placeholder = 'Wiadomość "dziś" — użyj {OFFER}';
@@ -674,6 +675,7 @@ async function loadMsg() {
         agedMaxDays: parseInt(agedMax.value, 10) || 5,
         agedMsgDzis: aDzis.value, agedMsgJutro: aJutro.value,
         notifyMode: notifySel.value,
+        notifyMarginZl: parseInt(notifyMargin.value, 10) || 0,
       });
 
       const btns = el("div", "msgbtns");
