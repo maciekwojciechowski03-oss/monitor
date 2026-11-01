@@ -147,6 +147,10 @@
   select.msgsel { padding: 7px 9px; font: inherit; font-size: 14px; color: var(--text);
                   background: var(--card); border: 1px solid var(--line); border-radius: 9px; }
   .msgbtns { display: flex; gap: 8px; }
+  .cenrow { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 0; border-top: 1px solid var(--line); }
+  .cenrow:first-child { border-top: none; }
+  .cenname { flex: 1 1 160px; font-weight: 700; font-size: .95rem; }
+  .censub { font-size: .8rem; color: var(--muted); font-weight: 600; }
   .agedsep { margin: 16px 0 8px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: .82rem; font-weight: 700; color: var(--muted); }
   .msghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   button.pencil { background: transparent; color: var(--accent); padding: 4px 6px; font-size: .82rem; font-weight: 600; flex-shrink: 0; }
@@ -184,7 +188,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-10-22</span>
+    <span class="app-version">v2026-11-01</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -201,8 +205,23 @@
     <div class="tabs">
       <button id="tabSearch" class="tab active">Obserwowane</button>
       <button id="tabMsg" class="tab">Wiadomości</button>
+      <button id="tabCennik" class="tab">Cennik</button>
       <button id="tabSold" class="tab">Sprzedane</button>
       <button id="tabBlock" class="tab">Zablokowani</button>
+    </div>
+
+    <div id="view-cennik" class="hidden">
+      <div class="card">
+        <div class="listbar">
+          <span class="cap">Cennik iPhone — po ile kupować / sprzedawać</span>
+          <span class="barbtns">
+            <button id="cennikEdit" class="sm gray">➕ Dodaj / edytuj modele</button>
+            <button id="cennikSave" class="sm">Zapisz cennik</button>
+          </span>
+        </div>
+        <p class="foot" style="text-align:left;margin:2px 0 0">„Kup" to Twoja oferta skupu (steruje powiadomieniami „okazje" i botem). „Sprzedaj" to cena na zbyciu — tylko podgląd. Modele dodajesz przez „Dodaj / edytuj modele".</p>
+        <div id="cennikList"><div class="empty">Ładowanie…</div></div>
+      </div>
     </div>
 
     <div id="view-msg" class="hidden">
@@ -572,20 +591,66 @@ async function loadSold() {
 function showTab(which) {
   $("view-search").classList.toggle("hidden", which !== "search");
   $("view-msg").classList.toggle("hidden", which !== "msg");
+  $("view-cennik").classList.toggle("hidden", which !== "cennik");
   $("view-sold").classList.toggle("hidden", which !== "sold");
   $("view-block").classList.toggle("hidden", which !== "block");
   $("tabSearch").classList.toggle("active", which === "search");
   $("tabMsg").classList.toggle("active", which === "msg");
+  $("tabCennik").classList.toggle("active", which === "cennik");
   $("tabSold").classList.toggle("active", which === "sold");
   $("tabBlock").classList.toggle("active", which === "block");
   if (which === "msg") loadMsg();
+  if (which === "cennik") loadCennik();
   if (which === "sold") loadSold();
   if (which === "block") loadBlock();
 }
 $("tabSearch").onclick = () => showTab("search");
 $("tabMsg").onclick = () => showTab("msg");
+$("tabCennik").onclick = () => showTab("cennik");
 $("tabSold").onclick = () => showTab("sold");
 $("tabBlock").onclick = () => showTab("block");
+
+// --- Cennik iPhone (kup / sprzedaj per model) ---
+let cennikTarget = null;
+async function loadCennik() {
+  const box = $("cennikList"); box.innerHTML = '<div class="empty">Ładowanie…</div>';
+  try {
+    const targets = await api("GET", "/targets");
+    cennikTarget = targets.find((t) => (t.title || "").toLowerCase() === "iphone") || targets[0];
+    if (!cennikTarget) { box.innerHTML = '<div class="empty">Brak wyszukiwania iPhone.</div>'; return; }
+    const rules = Array.isArray(cennikTarget.priceRules) ? cennikTarget.priceRules.map((r) => ({ ...r })) : [];
+    box.innerHTML = "";
+    if (!rules.length) { box.appendChild(el("div", "empty", 'Brak modeli — użyj „Dodaj / edytuj modele".')); return; }
+    for (const r of rules) {
+      const row = el("div", "cenrow");
+      const name = [(r.match && r.match.phonemodel) || "?", (r.match && r.match.builtinmemory_phones) || ""].filter(Boolean).join(" · ");
+      row.appendChild(el("span", "cenname", name));
+      const kup = document.createElement("input"); kup.type = "number"; kup.min = "0"; kup.className = "msgnum"; kup.placeholder = "kup"; if (r.price != null) kup.value = r.price;
+      const sell = document.createElement("input"); sell.type = "number"; sell.min = "0"; sell.className = "msgnum"; sell.placeholder = "sprzedaj"; if (r.sell != null) sell.value = r.sell;
+      row.append(el("span", "censub", "Kup"), kup, el("span", "censub", "zł · Sprzedaj"), sell, el("span", "censub", "zł"));
+      row._rule = r; row._kup = kup; row._sell = sell;
+      box.appendChild(row);
+    }
+  } catch (e) { box.innerHTML = ""; box.appendChild(el("div", "note", "Nie udało się pobrać: " + e.message)); }
+}
+async function saveCennik() {
+  if (!cennikTarget) return;
+  const btn = $("cennikSave"); const prev = btn.textContent; btn.disabled = true; btn.textContent = "Zapisuję…";
+  try {
+    const rules = [...$("cennikList").querySelectorAll(".cenrow")].map((row) => {
+      const r = { ...row._rule };
+      const k = parseInt(row._kup.value, 10), s = parseInt(row._sell.value, 10);
+      if (!isNaN(k)) r.price = k; else delete r.price;
+      if (!isNaN(s)) r.sell = s; else delete r.sell;
+      return r;
+    });
+    await api("PATCH", "/targets?id=" + encodeURIComponent(cennikTarget.id), { priceRules: rules });
+    showMsg("Zapisano cennik (" + rules.length + ")", "ok");
+  } catch (e) { showMsg(e.message, "err"); }
+  finally { btn.disabled = false; btn.textContent = prev; }
+}
+$("cennikEdit").onclick = () => { if (cennikTarget) openRules(cennikTarget); };
+$("cennikSave").onclick = saveCennik;
 $("refreshSold").onclick = () => loadSold();
 $("refreshBlock").onclick = () => loadBlock();
 
@@ -809,6 +874,7 @@ function ruleCard(r) {
     if (!Object.keys(m).length) return null; // reguła bez warunków -> pomijamy
     const out = { match: m };
     if (price.value !== "" && !isNaN(parseInt(price.value, 10))) out.price = parseInt(price.value, 10);
+    if (r && r.sell != null) out.sell = r.sell; // zachowaj cene sprzedazy (edytowana w zakladce Cennik)
     if (dz.value.trim()) out.msgDzis = dz.value;
     if (ju.value.trim()) out.msgJutro = ju.value;
     return out;
