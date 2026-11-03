@@ -188,7 +188,7 @@
 <div class="wrap">
   <header>
     <h1>🔎 OLX Monitor</h1>
-    <span class="app-version">v2026-11-01</span>
+    <span class="app-version">v2026-11-03</span>
   </header>
   <p class="sub">Linki, które obserwuje bot. Każdy ma własny tytuł — trafia na górę powiadomienia na Slacku.</p>
 
@@ -733,12 +733,20 @@ async function loadMsg() {
       cntRow.append(cntBtn, cntOut);
       c.appendChild(cntRow);
 
+      // --- Tor "Drops" (potaniałe ogłoszenia, osobna kolejka + grupa wysłanych) ---
+      c.appendChild(el("div", "agedsep", 'Tor „potaniałe" — ogłoszenia po spadku ceny'));
+      const dDzis = el("textarea", "msgta"); dDzis.value = t.dropMsgDzis || ""; dDzis.placeholder = 'Potaniałe „dziś" — np. Dzień dobry, widzę że cena spadła. Zainteresowany, proponuję {OFFER} zł, mogę odebrać dziś.';
+      const dJutro = el("textarea", "msgta"); dJutro.value = t.dropMsgJutro || ""; dJutro.placeholder = 'Potaniałe „jutro"';
+      c.appendChild(el("label", "msglbl", 'Wiadomość do potaniałych „dziś"')); c.appendChild(dDzis);
+      c.appendChild(el("label", "msglbl", 'Wiadomość do potaniałych „jutro"')); c.appendChild(dJutro);
+
       const payload = () => ({
         msgDzis: dzis.value, msgJutro: jutro.value,
         offerPct: parseInt(pct.value, 10) || 80, cutoffHour: parseInt(cut.value, 10),
         agedMinDays: parseInt(agedMin.value, 10) || 0,
         agedMaxDays: parseInt(agedMax.value, 10) || 5,
         agedMsgDzis: aDzis.value, agedMsgJutro: aJutro.value,
+        dropMsgDzis: dDzis.value, dropMsgJutro: dJutro.value,
         notifyMode: notifySel.value,
         notifyMarginZl: parseInt(notifyMargin.value, 10) || 0,
       });
