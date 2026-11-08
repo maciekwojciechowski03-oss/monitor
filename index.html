@@ -699,9 +699,14 @@ function computeKpis(m) {
   return { last, prev, change };
 }
 
-function loadCharts() {
+async function loadCharts() {
   const head = $("wykHead"), sel = $("wykSelect"), body = $("wykBody");
-  const data = readCharts();
+  body.innerHTML = '<div class="empty">Ładowanie…</div>';
+  // serwer = zrodlo prawdy (sync miedzy urzadzeniami); localStorage = zapas offline
+  let data = null;
+  try { data = await api("GET", "/charts"); } catch (e) {}
+  if (data && Array.isArray(data.modele) && data.modele.length) { try { localStorage.setItem(WYK_KEY, JSON.stringify(data)); } catch (e) {} }
+  else data = readCharts();
   if (!data || !Array.isArray(data.modele) || !data.modele.length) {
     head.textContent = "";
     sel.classList.add("hidden");
@@ -1238,7 +1243,7 @@ function parseImport(obj) {
   return out;
 }
 
-function importRules(text) {
+async function importRules(text) {
   let obj;
   try { obj = JSON.parse(text); } catch (e) { showMsg("Plik nie jest poprawnym JSON.", "err"); return; }
 
@@ -1250,9 +1255,12 @@ function importRules(text) {
       const w = validateChartsData(obj.wykresy);
       try { localStorage.setItem(WYK_KEY, JSON.stringify(w)); }
       catch (e) { throw new Error("nie zapisano w przeglądarce — " + e.message); }
+      let srv = "";
+      try { await api("POST", "/charts", w); } // zapis na serwer → sync miedzy urzadzeniami
+      catch (e) { srv = " (lokalnie; serwer niedostępny)"; }
       if (!$("view-wykresy").classList.contains("hidden")) loadCharts(); // odswiez, jesli zakladka otwarta
       const t = parseLocal(w.teraz);
-      chartsMsg = "Wykresy: " + w.modele.length + " modeli" + (t ? ", stan na " + ddyyyy(t) + " " + hhmm(t) : "") + " ✓";
+      chartsMsg = "Wykresy: " + w.modele.length + " modeli" + (t ? ", stan na " + ddyyyy(t) + " " + hhmm(t) : "") + " ✓" + srv;
     } catch (e) { chartsMsg = "Wykresy: błąd — " + e.message; }
   }
 
