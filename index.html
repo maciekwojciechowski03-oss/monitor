@@ -122,6 +122,8 @@
   .switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
   .switch input:disabled + .track { opacity: .5; cursor: wait; }
   .switch .lbl { min-width: 24px; }
+  .rolesel { padding: 6px 8px; font: inherit; font-size: .8rem; color: var(--text);
+             background: var(--card); border: 1px solid var(--line); border-radius: 9px; }
 
   .note { color: var(--muted); font-size: .8rem; padding: 8px 0; }
 
@@ -500,9 +502,24 @@ function render(list) {
       }
     };
 
+    // Rola: co ten link robi. "dane" = tylko zbieranie do wykresów (bez Slacka/Automy);
+    // "akcje" = Slack okazje + Automa, bez zapisu danych; "oba" = jedno i drugie.
+    const roleSel = document.createElement("select");
+    roleSel.className = "rolesel";
+    roleSel.title = "Dane = zbieraj do wykresów (bez Slacka/Automy). Akcje = Slack+Automa, bez zapisu danych. Oba = wszystko.";
+    [["oba", "Dane + akcje"], ["dane", "Tylko dane"], ["akcje", "Tylko akcje"]].forEach(([v, l]) => roleSel.appendChild(new Option(l, v)));
+    roleSel.value = ["dane", "akcje"].includes(t.role) ? t.role : "oba";
+    roleSel.onchange = async () => {
+      const want = roleSel.value, prev = t.role || "oba";
+      roleSel.disabled = true;
+      try { await api("PATCH", "/targets?id=" + encodeURIComponent(t.id), { role: want }); t.role = want; showMsg("Rola: " + t.title + " → " + want, "ok"); }
+      catch (e) { roleSel.value = prev; showMsg("Nie udało się zmienić roli: " + e.message, "err"); }
+      finally { roleSel.disabled = false; }
+    };
+
     const bEdit = el("button", "sm gray", "Edytuj");
     const bDel = el("button", "sm del", "Usuń");
-    acts.appendChild(sw); acts.appendChild(bEdit); acts.appendChild(bDel);
+    acts.appendChild(sw); acts.appendChild(roleSel); acts.appendChild(bEdit); acts.appendChild(bDel);
     head.appendChild(info); head.appendChild(acts);
 
     const editBox = el("div", "editbox hidden");
