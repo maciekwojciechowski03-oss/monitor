@@ -1227,6 +1227,8 @@ function parseImport(obj) {
     const rule = { match };
     const cena = row.cena != null ? row.cena : row.price;
     if (cena != null && String(cena).trim() !== "" && !isNaN(parseInt(cena, 10))) rule.price = parseInt(cena, 10);
+    const sprzedaj = row.sprzedaj != null ? row.sprzedaj : row.sell; // cena sprzedazy (Cennik + "Wystaw za")
+    if (sprzedaj != null && String(sprzedaj).trim() !== "" && !isNaN(parseInt(sprzedaj, 10))) rule.sell = parseInt(sprzedaj, 10);
     const dz = row.wiadomoscDzis != null ? row.wiadomoscDzis : row.msgDzis;
     const ju = row.wiadomoscJutro != null ? row.wiadomoscJutro : row.msgJutro;
     if (dz && String(dz).trim()) rule.msgDzis = String(dz);
