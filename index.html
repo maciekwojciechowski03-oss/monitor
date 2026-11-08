@@ -579,10 +579,16 @@ async function loadSold() {
   const box = $("soldList");
   box.innerHTML = '<div class="empty">Ładowanie…</div>';
   try {
-    const data = await api("GET", "/archive");
+    const [data, targets] = await Promise.all([
+      api("GET", "/archive"),
+      api("GET", "/targets").catch(() => []),
+    ]);
     soldRecs = data.records || [];
-    // wyszukiwania obecne w archiwum -> selektor
-    const names = [...new Set(soldRecs.map((r) => r.search || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+    // selektor = WSZYSTKIE obserwowane wyszukiwania + te historyczne obecne w archiwum
+    const names = [...new Set([
+      ...(Array.isArray(targets) ? targets.map((t) => t.title || "") : []),
+      ...soldRecs.map((r) => r.search || ""),
+    ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
     const sel = $("soldSel");
     sel.innerHTML = "";
     sel.appendChild(new Option("Wszystkie wyszukiwania", ""));
