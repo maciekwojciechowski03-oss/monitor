@@ -329,6 +329,7 @@
             <button id="refreshSold" class="sm gray">↻ Odśwież</button>
           </span>
         </div>
+        <select id="soldSel" class="rolesel" style="width:100%;margin:2px 0 10px"></select>
         <div id="soldList"><div class="empty">Ładowanie…</div></div>
       </div>
       <p class="foot">Ogłoszenie bez odpowiedzi przez 2 h bot uznaje za sprzedane — automatycznie.<br>
@@ -571,14 +572,39 @@ function fmtDate(iso) {
   return new Intl.DateTimeFormat("pl-PL", { timeZone: "Europe/Warsaw", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(t));
 }
 
+let soldRecs = [];
+let soldSearch = ""; // "" = wszystkie; inaczej tytuł wyszukiwania
+
 async function loadSold() {
   const box = $("soldList");
   box.innerHTML = '<div class="empty">Ładowanie…</div>';
   try {
     const data = await api("GET", "/archive");
-    const recs = (data.records || []).slice().sort((a, b) => (a.soldAt < b.soldAt ? 1 : -1));
-    $("soldCap").textContent = "Sprzedane ogłoszenia — " + recs.length;
-    if (!recs.length) { box.innerHTML = '<div class="empty">Jeszcze nic nie zostało zapisane jako sprzedane.</div>'; return; }
+    soldRecs = data.records || [];
+    // wyszukiwania obecne w archiwum -> selektor
+    const names = [...new Set(soldRecs.map((r) => r.search || "").filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+    const sel = $("soldSel");
+    sel.innerHTML = "";
+    sel.appendChild(new Option("Wszystkie wyszukiwania", ""));
+    names.forEach((n) => sel.appendChild(new Option(n, n)));
+    if (!names.includes(soldSearch)) soldSearch = "";
+    sel.value = soldSearch;
+    sel.onchange = () => { soldSearch = sel.value; renderSold(); };
+    renderSold();
+  } catch (e) {
+    box.innerHTML = "";
+    box.appendChild(el("div", "note", "Nie udało się pobrać: " + e.message));
+  }
+}
+
+// Tabela sprzedanych, zawężona do wybranego wyszukiwania (soldSearch).
+function renderSold() {
+  const box = $("soldList");
+  const recs = (soldSearch ? soldRecs.filter((r) => (r.search || "") === soldSearch) : soldRecs.slice())
+    .sort((a, b) => (a.soldAt < b.soldAt ? 1 : -1));
+  $("soldCap").textContent = "Sprzedane — " + recs.length + (soldSearch ? " · " + soldSearch : " (wszystkie)");
+  if (!recs.length) { box.innerHTML = '<div class="empty">Brak sprzedanych dla tego wyboru.</div>'; return; }
+  {
     const wrap = el("div", "stwrap");
     const table = document.createElement("table");
     table.className = "stable";
@@ -632,9 +658,6 @@ async function loadSold() {
     wrap.appendChild(table);
     box.innerHTML = "";
     box.appendChild(wrap);
-  } catch (e) {
-    box.innerHTML = "";
-    box.appendChild(el("div", "note", "Nie udało się pobrać: " + e.message));
   }
 }
 
@@ -1379,14 +1402,16 @@ async function downloadSoldCsv() {
   const prev = btn.textContent;
   btn.disabled = true; btn.textContent = "Pobieram…";
   try {
-    const res = await fetch(BASE + "/archive.csv", { cache: "no-store", headers: { "X-Panel-Token": token } });
+    const q = soldSearch ? "?search=" + encodeURIComponent(soldSearch) : "";
+    const res = await fetch(BASE + "/archive.csv" + q, { cache: "no-store", headers: { "X-Panel-Token": token } });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const blob = await res.blob();
     const u = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const d = new Date();
     const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-    a.href = u; a.download = "sprzedane_" + stamp + ".csv";
+    const slug = soldSearch ? "_" + soldSearch.replace(/[^\w-]+/g, "-") : "";
+    a.href = u; a.download = "sprzedane" + slug + "_" + stamp + ".csv";
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(u);
     showMsg("Pobrano plik CSV.", "ok");
@@ -1405,14 +1430,16 @@ async function downloadOffersCsv() {
   const prev = btn.textContent;
   btn.disabled = true; btn.textContent = "Pobieram…";
   try {
-    const res = await fetch(BASE + "/offers.csv", { cache: "no-store", headers: { "X-Panel-Token": token } });
+    const q = soldSearch ? "?search=" + encodeURIComponent(soldSearch) : "";
+    const res = await fetch(BASE + "/offers.csv" + q, { cache: "no-store", headers: { "X-Panel-Token": token } });
     if (!res.ok) throw new Error("HTTP " + res.status);
     const blob = await res.blob();
     const u = URL.createObjectURL(blob);
     const a = document.createElement("a");
     const d = new Date();
     const stamp = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-    a.href = u; a.download = "dane_ofert_" + stamp + ".csv";
+    const slug = soldSearch ? "_" + soldSearch.replace(/[^\w-]+/g, "-") : "";
+    a.href = u; a.download = "dane_ofert" + slug + "_" + stamp + ".csv";
     document.body.appendChild(a); a.click(); a.remove();
     URL.revokeObjectURL(u);
     showMsg("Pobrano dane ofert.", "ok");
