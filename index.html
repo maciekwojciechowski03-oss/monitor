@@ -151,6 +151,7 @@
   .cenrow:first-child { border-top: none; }
   .cenname { flex: 1 1 160px; font-weight: 700; font-size: .95rem; }
   .censub { font-size: .8rem; color: var(--muted); font-weight: 600; }
+  .cenwyst { font-size: .8rem; font-weight: 700; color: var(--accent); }
   .agedsep { margin: 16px 0 8px; padding-top: 12px; border-top: 1px dashed var(--line); font-size: .82rem; font-weight: 700; color: var(--muted); }
   .msghead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
   button.pencil { background: transparent; color: var(--accent); padding: 4px 6px; font-size: .82rem; font-weight: 600; flex-shrink: 0; }
@@ -887,7 +888,11 @@ async function loadCennik() {
       row.appendChild(nameEl);
       const kup = document.createElement("input"); kup.type = "number"; kup.min = "0"; kup.className = "msgnum"; kup.placeholder = "kup"; if (r.price != null) kup.value = r.price;
       const sell = document.createElement("input"); sell.type = "number"; sell.min = "0"; sell.className = "msgnum"; sell.placeholder = "sprzedaj"; if (r.sell != null) sell.value = r.sell;
-      row.append(el("span", "censub", "Kup"), kup, el("span", "censub", "zł · Sprzedaj"), sell, el("span", "censub", "zł"));
+      // "Wystaw za" = cena wystawienia = Sprzedaj + 100 zl (zapas na opust 100 zl przy sprzedazy)
+      const wyst = el("span", "cenwyst", "");
+      const updWyst = () => { const s = parseInt(sell.value, 10); wyst.textContent = isNaN(s) ? "" : ("· Wystaw " + (s + 100) + " zł"); };
+      updWyst(); sell.addEventListener("input", updWyst);
+      row.append(el("span", "censub", "Kup"), kup, el("span", "censub", "zł · Sprzedaj"), sell, el("span", "censub", "zł"), wyst);
       row._rule = r; row._kup = kup; row._sell = sell;
       box.appendChild(row);
     }
