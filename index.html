@@ -584,11 +584,12 @@ async function loadSold() {
       api("GET", "/targets").catch(() => []),
     ]);
     soldRecs = data.records || [];
-    // selektor = WSZYSTKIE obserwowane wyszukiwania + te historyczne obecne w archiwum
-    const names = [...new Set([
-      ...(Array.isArray(targets) ? targets.map((t) => t.title || "") : []),
-      ...soldRecs.map((r) => r.search || ""),
-    ].filter(Boolean))].sort((a, b) => a.localeCompare(b, "pl"));
+    // selektor = tylko WŁĄCZONE obserwowane wyszukiwania (bez wyłączonych i historycznych)
+    const names = (Array.isArray(targets) ? targets : [])
+      .filter((t) => t.enabled !== false)
+      .map((t) => t.title || "")
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b, "pl"));
     const sel = $("soldSel");
     sel.innerHTML = "";
     sel.appendChild(new Option("Wszystkie wyszukiwania", ""));
