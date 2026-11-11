@@ -718,6 +718,8 @@ const escHtml = (s) => String(s == null ? "" : s).replace(/[&<>"]/g, (c) => ({ "
 const modelKey = (m) => m.model + "|" + m.pamiec;
 const labelOf = (m) => m.etykieta || ("iPhone " + m.model + " " + m.pamiec + " GB");
 const hasChart = (m) => (m.tygodnie || []).some((w) => w.mediana != null); // model ma co rysowac?
+// Koniec okna: pole `do` (nowy format kroczacy), fallback od+6 (stary format tygodniowy).
+const weekEnd = (w) => (w.do ? parseLocal(w.do) : (parseLocal(w.od) ? addDays(parseLocal(w.od), 6) : null));
 
 function readCharts() {
   try { const r = localStorage.getItem(WYK_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
@@ -735,7 +737,7 @@ function validateChartsData(w) {
 
 // Kafelki: ostatni PELNY tydzien (pelny=true, bez luki, mediana != null) i poprzedni taki.
 function computeKpis(m) {
-  const valid = (m.tygodnie || []).filter((w) => w.pelny === true && w.luka !== true && w.mediana != null);
+  const valid = (m.tygodnie || []).filter((w) => w.pelny !== false && w.luka !== true && w.mediana != null);
   const last = valid[valid.length - 1] || null;
   const prev = valid[valid.length - 2] || null;
   let change = null;
@@ -801,17 +803,17 @@ function renderChart(data, key) {
   }
   const kpi = computeKpis(m);
 
-  const sub = "Mediana cen w tygodniu (pon–nd), bateria ≥ 80% (" + (m.sprzedazy != null ? m.sprzedazy : "?") +
-    " sprzedaży). Szary: tydzień niepełny lub z luką w danych.";
+  const sub = "Mediana cen w oknie 7 dni, bateria ≥ 80% (" + (m.sprzedazy != null ? m.sprzedazy : "?") +
+    " sprzedaży). Szary: okno z luką w danych.";
   const subWarn = m.malo_danych
     ? '<span class="warn">Mało danych: średnio ' + (m.srednio_tygodniowo != null ? m.srednio_tygodniowo : "?") +
       ' sprzedaży tygodniowo, wynik orientacyjny.</span>' : "";
 
-  const lastCap = kpi.last ? "tydz. od " + dd(parseLocal(kpi.last.od)) : "—";
+  const lastCap = kpi.last ? dd(parseLocal(kpi.last.od)) + "–" + (weekEnd(kpi.last) ? dd(weekEnd(kpi.last)) : "?") : "—";
   const changeCap = !kpi.prev ? "—" : kpi.change === 0 ? "bez zmian" : "zmiana " + (kpi.change > 0 ? "+" : "−") + zl(Math.abs(kpi.change));
   const tiles = '<div class="wyk-tiles">' +
-    tile("green", "Ostatni pełny tydzień", kpi.last ? zl(kpi.last.mediana) : "–", lastCap) +
-    tile("", "Tydzień wcześniej", kpi.prev ? zl(kpi.prev.mediana) : "–", changeCap) +
+    tile("green", "Ostatnie pełne 7 dni", kpi.last ? zl(kpi.last.mediana) : "–", lastCap) +
+    tile("", "Poprzednie 7 dni", kpi.prev ? zl(kpi.prev.mediana) : "–", changeCap) +
     tile("gold", "Mediana 30 dni", m.mediana_30d != null ? zl(m.mediana_30d) : "–", m.sztuk_30d != null ? m.sztuk_30d + " szt." : "—") +
     '</div>';
 
@@ -861,7 +863,7 @@ function buildSvg(weeks, med30) {
       s += '<text x="' + cx + '" y="' + (yBase - 20) + '" text-anchor="middle" font-size="10" fill="var(--muted)">za mało</text>';
       s += '<text x="' + cx + '" y="' + (yBase - 6) + '" text-anchor="middle" font-size="10" fill="var(--muted)">' + (w.sztuk != null ? w.sztuk + " szt." : "") + '</text>';
     } else {
-      const grey = w.pelny !== true || w.luka === true;
+      const grey = w.pelny === false || w.luka === true;
       const top = y(w.mediana), hgt = Math.max(2, yBase - top);
       s += '<rect x="' + x + '" y="' + top.toFixed(1) + '" width="' + bw + '" height="' + hgt.toFixed(1) + '" rx="3" fill="' + (grey ? "var(--muted)" : "var(--accent)") + '"/>';
       s += '<text x="' + cx + '" y="' + (top - 6).toFixed(1) + '" text-anchor="middle" font-size="11.5" font-weight="700" fill="var(--text)">' + zl(w.mediana) + '</text>';
@@ -869,7 +871,7 @@ function buildSvg(weeks, med30) {
     }
     s += '<rect class="hit" data-i="' + i + '" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + plotH + '" fill="transparent"/>';
   });
-  s += '<text x="' + L + '" y="' + (H - 10) + '" font-size="10.5" fill="var(--muted)">tydzień zaczynający się</text>';
+  s += '<text x="' + L + '" y="' + (H - 10) + '" font-size="10.5" fill="var(--muted)">początek okna 7 dni</text>';
   s += "</svg>";
   return s;
 }
@@ -880,11 +882,11 @@ function attachTip(root, weeks) {
   if (!svg || !tip) return;
   const show = (i, cx, cy) => {
     const w = weeks[i]; if (!w) return;
-    const od = parseLocal(w.od), end = od && addDays(od, 6);
-    let html = "<b>Tydzień " + (od ? dd(od) : "?") + "–" + (end ? dd(end) : "?") + "</b><br>";
+    const od = parseLocal(w.od), end = weekEnd(w);
+    let html = "<b>" + (od ? dd(od) : "?") + "–" + (end ? dd(end) : "?") + "</b><br>";
     html += w.mediana != null ? "Mediana: " + zl(w.mediana) : "Mediana: za mało danych";
     html += "<br>Sztuk: " + (w.sztuk != null ? w.sztuk : "?");
-    if (w.mediana != null && (w.pelny !== true || w.luka === true)) html += "<br>" + (w.luka === true ? "luka w danych monitora" : "tydzień niepełny");
+    if (w.mediana != null && (w.pelny === false || w.luka === true)) html += "<br>" + (w.luka === true ? "luka w danych monitora" : "okno niepełne");
     tip.innerHTML = html;
     const r = chart.getBoundingClientRect();
     tip.style.display = "block";
