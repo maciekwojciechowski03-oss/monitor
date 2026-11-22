@@ -810,128 +810,19 @@ function renderV1(data) {
   renderChart(data, want);
 }
 
-// ===== Wersja 2: slupki=sztuk, linia ciagla=mediana, przerywana=mediana krocząca =====
+// ===== Wersja 2: renderujemy TYM SAMYM stylem co iPhone =====
+// Serie v2 (slupki: mediana + sztuk + luka) mapujemy na ksztalt modeli v1 i oddajemy
+// do renderV1/renderChart. Jeden wyglad (slupki=mediana, zlota linia 30d, kafelki);
+// modele bez mediany chowaja sie tak samo jak przy iPhone.
 function renderV2(data) {
-  const head = $("wykHead"), sel = $("wykSelect"), body = $("wykBody");
   const u = data.ustawienia || {};
-  const dd2 = parseLocal(data.dane_do || "");
-  head.textContent = (data._search ? data._search.charAt(0).toUpperCase() + data._search.slice(1) + " · " : "") +
-    data.serie.length + " serii" + (u.slupek_dni ? " · słupki co " + u.slupek_dni + " dni" : "") + (dd2 ? " · dane do " + ddyyyy(dd2) : "");
-  sel.classList.remove("hidden"); sel.innerHTML = "";
-  for (const s of data.serie) sel.appendChild(new Option((s.klucz || "?") + (s.malo_danych ? " (mało danych)" : ""), s.klucz));
-  let want = localStorage.getItem(WYK_SEL_KEY);
-  const keys = data.serie.map((s) => s.klucz);
-  if (!keys.includes(want)) want = keys[0];
-  sel.value = want;
-  sel.onchange = () => { localStorage.setItem(WYK_SEL_KEY, sel.value); renderSeriesV2(data, sel.value); };
-  renderSeriesV2(data, want);
-}
-
-function renderSeriesV2(data, key) {
-  const body = $("wykBody");
-  const s = data.serie.find((x) => x.klucz === key) || data.serie[0];
-  const u = data.ustawienia || {};
-  const pokaz = Array.isArray(u.pokaz) ? u.pokaz : ["sztuk", "mediana", "mediana_kroczaca"];
-  const rollDni = u.mediana_kroczaca_dni != null ? u.mediana_kroczaca_dni : 30;
-  const sub = "Sprzedaży: " + (s.sprzedazy != null ? s.sprzedazy : "?") +
-    ", średnio " + (s.srednio_na_slupek != null ? s.srednio_na_slupek : "?") + " na słupek" +
-    (s.mediana_30d != null ? " · mediana " + rollDni + " dni: " + zl(s.mediana_30d) + " (" + (s.sztuk_30d != null ? s.sztuk_30d : "?") + " szt.)" : "");
-  const warn = s.malo_danych ? '<span class="warn"> · mało danych</span>' : "";
-  const legend = '<div class="wyk-sub">' +
-    (pokaz.includes("sztuk") ? '<span style="color:var(--muted)">▮ liczba sztuk</span>  ' : "") +
-    (pokaz.includes("mediana") ? '<span style="color:var(--accent)">▬ mediana</span>  ' : "") +
-    (pokaz.includes("mediana_kroczaca") ? '<span style="color:#d7a92a">╌ mediana krocząca (' + rollDni + " dni)</span>" : "") +
-    '</div>';
-  body.innerHTML =
-    '<div class="wyk-title">' + escHtml(s.klucz || "") + warn + '</div>' +
-    '<div class="wyk-sub">' + escHtml(sub) + '</div>' + legend +
-    '<div class="wyk-chart">' + buildSvgV2(s.slupki || [], pokaz) + '<div class="wyk-tip"></div></div>' +
-    '<div class="wyk-foot">' + escHtml(u.filtry || "") + '<br>Cena = ostatnia cena w ogłoszeniu, nie cena transakcji.</div>';
-  attachTipV2(body, s.slupki || []);
-}
-
-// Wykres v2: slupki liczby sztuk (os lewa) + linia mediany i przerywana krocząca (os prawa, zł).
-function buildSvgV2(bars, pokaz) {
-  if (!bars.length) return '<div class="note">Brak słupków.</div>';
-  const showCount = pokaz.includes("sztuk"), showMed = pokaz.includes("mediana"), showRoll = pokaz.includes("mediana_kroczaca");
-  const n = bars.length;
-  const prices = [];
-  bars.forEach((b) => { if (showMed && b.mediana != null) prices.push(b.mediana); if (showRoll && b.mediana_kroczaca != null) prices.push(b.mediana_kroczaca); });
-  const havePrice = prices.length > 0;
-  const maxCount = Math.max(1, ...bars.map((b) => b.sztuk || 0));
-  let pLo = 0, pHi = 0;
-  if (havePrice) { pLo = Math.floor((Math.min(...prices) - 200) / 100) * 100; if (pLo < 0) pLo = 0; pHi = Math.ceil((Math.max(...prices) + 200) / 100) * 100; if (pHi <= pLo) pHi = pLo + 100; }
-  const L = 46, R = havePrice ? 54 : 14, T = 24, B = 48, H = 360;
-  const slot = Math.max(34, Math.round((Math.max(320, n * 54) - L - R) / n));
-  const W = L + R + slot * n, plotH = H - T - B, yBase = T + plotH;
-  const yCount = (c) => yBase - (c / maxCount) * plotH;
-  const yPrice = (v) => T + ((pHi - v) / (pHi - pLo)) * plotH;
-  const centers = bars.map((b, i) => L + slot * i + slot / 2);
-  const everyOther = slot < 50 && n > 8;
-  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img">';
-  s += '<defs><pattern id="luka2" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--muted)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--line)" stroke-width="2"/></pattern></defs>';
-  const cStep = Math.max(1, Math.ceil(maxCount / 4));
-  for (let c = 0; c <= maxCount + 0.001; c += cStep) {
-    const yy = yCount(c).toFixed(1);
-    s += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="var(--line)" stroke-width="1"/>';
-    if (showCount) s += '<text x="' + (L - 6) + '" y="' + (yCount(c) + 4).toFixed(1) + '" text-anchor="end" font-size="10.5" fill="var(--muted)">' + c + '</text>';
-  }
-  if (havePrice) {
-    const step = Math.max(50, Math.ceil((pHi - pLo) / 4 / 50) * 50);
-    for (let v = pLo; v <= pHi + 1; v += step) s += '<text x="' + (W - R + 8) + '" y="' + (yPrice(v) + 4).toFixed(1) + '" text-anchor="start" font-size="10.5" fill="var(--muted)">' + zl(v) + '</text>';
-  }
-  bars.forEach((b, i) => {
-    const cx = centers[i], bw = Math.round(slot * 0.5), x = Math.round(cx - bw / 2);
-    if (showCount && (b.sztuk || 0) > 0) {
-      const top = yCount(b.sztuk), h = Math.max(1, yBase - top);
-      s += '<rect x="' + x + '" y="' + top.toFixed(1) + '" width="' + bw + '" height="' + h.toFixed(1) + '" rx="2" fill="' + (b.luka === true ? "url(#luka2)" : "var(--muted)") + '"/>';
-      s += '<text x="' + cx + '" y="' + (top - 4).toFixed(1) + '" text-anchor="middle" font-size="10" fill="var(--muted)">' + b.sztuk + '</text>';
-    }
-    if (!everyOther || i % 2 === 0) {
-      const od = parseLocal(b.od), dod = parseLocal(b.do);
-      s += '<text x="' + cx + '" y="' + (yBase + 16) + '" text-anchor="middle" font-size="9.5" fill="var(--muted)">' + (od ? dd(od) : "?") + "–" + (dod ? dd(dod) : "?") + '</text>';
-    }
-    s += '<rect class="hit" data-i="' + i + '" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + plotH + '" fill="transparent"/>';
-  });
-  const drawLine = (field, color, dash) => {
-    let d = "", pen = false;
-    bars.forEach((b, i) => { const v = b[field]; if (v == null) { pen = false; return; } d += (pen ? " L" : " M") + centers[i] + " " + yPrice(v).toFixed(1); pen = true; });
-    if (d) s += '<path d="' + d.trim() + '" fill="none" stroke="' + color + '" stroke-width="2"' + (dash ? ' stroke-dasharray="5 4"' : "") + '/>';
-    bars.forEach((b, i) => { const v = b[field]; if (v == null) return; s += '<circle cx="' + centers[i] + '" cy="' + yPrice(v).toFixed(1) + '" r="2.5" fill="' + color + '"/>'; });
-  };
-  if (showMed && havePrice) drawLine("mediana", "var(--accent)", false);
-  if (showRoll && havePrice) drawLine("mediana_kroczaca", "#d7a92a", true);
-  s += "</svg>";
-  return s;
-}
-
-function attachTipV2(root, bars) {
-  const svg = root.querySelector("svg"), tip = root.querySelector(".wyk-tip"), chart = root.querySelector(".wyk-chart");
-  if (!svg || !tip) return;
-  const show = (i, cx, cy) => {
-    const b = bars[i]; if (!b) return;
-    const od = parseLocal(b.od), dod = parseLocal(b.do);
-    let html = "<b>" + (od ? dd(od) : "?") + "–" + (dod ? dd(dod) : "?") + "</b><br>";
-    html += "Sztuk: " + (b.sztuk != null ? b.sztuk : "?");
-    html += "<br>Mediana: " + (b.mediana != null ? zl(b.mediana) : "za mało danych");
-    if (b.mediana_kroczaca != null) html += "<br>Mediana krocząca: " + zl(b.mediana_kroczaca);
-    if (b.luka === true) html += "<br>monitor nie działał części tego okresu — mniej sztuk, ceny zawyżone";
-    tip.innerHTML = html;
-    const r = chart.getBoundingClientRect();
-    tip.style.display = "block";
-    let left = cx - r.left + 12;
-    if (left + tip.offsetWidth > r.width) left = r.width - tip.offsetWidth - 4;
-    tip.style.left = Math.max(0, left) + "px";
-    tip.style.top = (cy - r.top + 12) + "px";
-  };
-  const hide = () => { tip.style.display = "none"; };
-  svg.querySelectorAll(".hit").forEach((h) => {
-    const i = +h.getAttribute("data-i");
-    h.addEventListener("pointerenter", (e) => show(i, e.clientX, e.clientY));
-    h.addEventListener("pointermove", (e) => show(i, e.clientX, e.clientY));
-    h.addEventListener("pointerleave", hide);
-    h.addEventListener("pointerdown", (e) => show(i, e.clientX, e.clientY));
-  });
+  const modele = (data.serie || []).map((s) => ({
+    model: s.klucz, pamiec: "", etykieta: s.klucz,
+    malo_danych: s.malo_danych, srednio_tygodniowo: s.srednio_na_slupek,
+    mediana_30d: s.mediana_30d, sztuk_30d: s.sztuk_30d, sprzedazy: s.sprzedazy,
+    tygodnie: (s.slupki || []).map((b) => ({ od: b.od, do: b.do, mediana: b.mediana, sztuk: b.sztuk, luka: b.luka, pelny: true })),
+  }));
+  renderV1({ modele, teraz: data.dane_do || null, plik_zrodlowy: data.plik_zrodlowy || null, filtry: u.filtry || "" });
 }
 
 function renderModelSelect(data) {
@@ -957,25 +848,27 @@ function renderChart(data, key) {
     return;
   }
   const kpi = computeKpis(m);
+  const _fb = (m.tygodnie || []).find((w) => w.od && w.do);
+  const winDni = _fb ? daysBetween(parseLocal(_fb.od), parseLocal(_fb.do)) + 1 : 7; // 7 dla iPhone, 14 dla MacBooków
 
-  const sub = "Mediana cen w oknie 7 dni, bateria ≥ 80% (" + (m.sprzedazy != null ? m.sprzedazy : "?") +
+  const sub = "Mediana cen w oknie " + winDni + " dni, bateria ≥ 80% (" + (m.sprzedazy != null ? m.sprzedazy : "?") +
     " sprzedaży). Szary: okno z luką w danych.";
   const subWarn = m.malo_danych
     ? '<span class="warn">Mało danych: średnio ' + (m.srednio_tygodniowo != null ? m.srednio_tygodniowo : "?") +
-      ' sprzedaży tygodniowo, wynik orientacyjny.</span>' : "";
+      ' sprzedaży na okno, wynik orientacyjny.</span>' : "";
 
   const lastCap = kpi.last ? dd(parseLocal(kpi.last.od)) + "–" + (weekEnd(kpi.last) ? dd(weekEnd(kpi.last)) : "?") : "—";
   const changeCap = !kpi.prev ? "—" : kpi.change === 0 ? "bez zmian" : "zmiana " + (kpi.change > 0 ? "+" : "−") + zl(Math.abs(kpi.change));
   const tiles = '<div class="wyk-tiles">' +
-    tile("green", "Ostatnie pełne 7 dni", kpi.last ? zl(kpi.last.mediana) : "–", lastCap) +
-    tile("", "Poprzednie 7 dni", kpi.prev ? zl(kpi.prev.mediana) : "–", changeCap) +
+    tile("green", "Ostatnie pełne " + winDni + " dni", kpi.last ? zl(kpi.last.mediana) : "–", lastCap) +
+    tile("", "Poprzednie " + winDni + " dni", kpi.prev ? zl(kpi.prev.mediana) : "–", changeCap) +
     tile("gold", "Mediana 30 dni", m.mediana_30d != null ? zl(m.mediana_30d) : "–", m.sztuk_30d != null ? m.sztuk_30d + " szt." : "—") +
     '</div>';
 
   const foot = '<div class="wyk-foot">' + escHtml(data.filtry || "") + '<br>Cena = ostatnia cena w ogłoszeniu, nie cena transakcji.</div>';
 
   body.innerHTML =
-    '<div class="wyk-title">' + escHtml("Cena " + labelOf(m) + " – tydzień po tygodniu") + '</div>' +
+    '<div class="wyk-title">' + escHtml("Cena " + labelOf(m) + (winDni === 7 ? " – tydzień po tygodniu" : " – okno " + winDni + " dni")) + '</div>' +
     '<div class="wyk-sub">' + escHtml(sub) + subWarn + '</div>' +
     tiles +
     '<div class="wyk-chart">' + buildSvg(m.tygodnie || [], m.mediana_30d) + '<div class="wyk-tip"></div></div>' +
@@ -1455,7 +1348,7 @@ async function importRules(text) {
   if (hasCharts) {
     try {
       const w = validateChartsData(obj.wykresy);
-      w._search = search; w.dane_do = obj.dane_do || w.dane_do || null; // do naglowka
+      w._search = search; w.dane_do = obj.dane_do || w.dane_do || null; w.plik_zrodlowy = obj.plik_zrodlowy || w.plik_zrodlowy || null; // do naglowka
       // scal z istniejacym blobem (serwer -> local), nadpisz tylko to wyszukiwanie — iPhone zostaje
       let blob = null;
       try { blob = await api("GET", "/charts"); } catch (e) {}
