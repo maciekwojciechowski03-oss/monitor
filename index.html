@@ -254,6 +254,7 @@
     <div id="view-wykresy" class="hidden">
       <div class="card">
         <div id="wykHead" class="wyk-head"></div>
+        <select id="wykSearchSel" class="wyk-sel hidden"></select>
         <select id="wykSelect" class="wyk-sel hidden"></select>
         <div id="wykBody"><div class="empty">Ładowanie…</div></div>
       </div>
@@ -695,8 +696,18 @@ $("tabSold").onclick = () => showTab("sold");
 $("tabBlock").onclick = () => showTab("block");
 
 // ====================== Wykresy cen ======================
-const WYK_KEY = "wykresy_cen_v1";       // pelny obiekt wykresow (z pliku importu)
-const WYK_SEL_KEY = "wykresy_wybor";    // zapamietany wybor modelu
+const WYK_KEY = "wykresy_cen_v1";       // blob wykresow per-wyszukiwanie: { "<wyszukiwanie>": <obj v1|v2>, ... }
+const WYK_SEL_KEY = "wykresy_wybor";    // zapamietany wybor modelu/serii
+const WYK_SEARCH_KEY = "wykresy_wyszukiwanie"; // zapamietany wybor wyszukiwania (iphone/macbook)
+
+// Blob /charts jest opakowany per-wyszukiwanie. Starsze dane to goly obiekt v1 (ma .modele)
+// -> traktuj jak { iphone: obj }. Zwraca zawsze mape wyszukiwanie->obiekt wykresow.
+function unwrapCharts(blob) {
+  if (!blob || typeof blob !== "object") return {};
+  if (Array.isArray(blob.modele) || Array.isArray(blob.serie) || blob.wersja != null) return { iphone: blob }; // legacy goly v1
+  return blob; // juz opakowany
+}
+const isV2 = (o) => !!(o && Array.isArray(o.serie));
 
 // Parsuj "RRRR-MM-DD" lub "RRRR-MM-DDTHH:MM" RECZNIE — new Date("…") potraktowalby
 // to jako UTC i przesunal date wzgledem czasu PL.
@@ -721,12 +732,14 @@ const hasChart = (m) => (m.tygodnie || []).some((w) => w.mediana != null); // mo
 // Koniec okna: pole `do` (nowy format kroczacy), fallback od+6 (stary format tygodniowy).
 const weekEnd = (w) => (w.do ? parseLocal(w.do) : (parseLocal(w.od) ? addDays(parseLocal(w.od), 6) : null));
 
-function readCharts() {
-  try { const r = localStorage.getItem(WYK_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
-}
 // Walidacja pliku wykresow — rzuca z czytelnym powodem (lapane przy imporcie).
 function validateChartsData(w) {
   if (!w || typeof w !== "object") throw new Error("brak obiektu wykresów");
+  if (Array.isArray(w.serie)) { // wersja 2: serie[].slupki
+    if (!w.serie.length) throw new Error("brak serii wykresów");
+    for (const s of w.serie) if (!s || s.klucz == null || !Array.isArray(s.slupki)) throw new Error("seria bez 'klucz'/'slupki'");
+    return w;
+  }
   if (w.wersja !== 1) throw new Error("nieobsługiwana wersja (" + w.wersja + ")");
   if (!Array.isArray(w.modele) || !w.modele.length) throw new Error("brak listy 'modele'");
   for (const m of w.modele) {
@@ -749,19 +762,37 @@ function computeKpis(m) {
 }
 
 async function loadCharts() {
-  const head = $("wykHead"), sel = $("wykSelect"), body = $("wykBody");
+  const head = $("wykHead"), searchSel = $("wykSearchSel"), sel = $("wykSelect"), body = $("wykBody");
   body.innerHTML = '<div class="empty">Ładowanie…</div>';
-  // serwer = zrodlo prawdy (sync miedzy urzadzeniami); localStorage = zapas offline
-  let data = null;
-  try { data = await api("GET", "/charts"); } catch (e) {}
-  if (data && Array.isArray(data.modele) && data.modele.length) { try { localStorage.setItem(WYK_KEY, JSON.stringify(data)); } catch (e) {} }
-  else data = readCharts();
-  if (!data || !Array.isArray(data.modele) || !data.modele.length) {
-    head.textContent = "";
-    sel.classList.add("hidden");
+  // serwer = zrodlo prawdy; localStorage = zapas offline. Blob jest opakowany per-wyszukiwanie.
+  let blob = null;
+  try { blob = await api("GET", "/charts"); } catch (e) {}
+  if (blob) { try { localStorage.setItem(WYK_KEY, JSON.stringify(unwrapCharts(blob))); } catch (e) {} }
+  else { try { blob = JSON.parse(localStorage.getItem(WYK_KEY) || "null"); } catch (e) {} }
+  const map = unwrapCharts(blob);
+  const searches = Object.keys(map).filter((k) => {
+    const o = map[k];
+    return o && ((Array.isArray(o.serie) && o.serie.length) || (Array.isArray(o.modele) && o.modele.some(hasChart)));
+  });
+  if (!searches.length) {
+    head.textContent = ""; searchSel.classList.add("hidden"); sel.classList.add("hidden");
     body.innerHTML = '<div class="empty">Brak danych wykresów. Zaimportuj plik z regułami + wykresami: zakładka „Cennik" → „➕ Dodaj / edytuj modele" → „⬆ Importuj plik".</div>';
     return;
   }
+  let wantSearch = localStorage.getItem(WYK_SEARCH_KEY);
+  if (!searches.includes(wantSearch)) wantSearch = searches[0];
+  if (searches.length > 1) {
+    searchSel.classList.remove("hidden"); searchSel.innerHTML = "";
+    for (const sName of searches) searchSel.appendChild(new Option(sName.charAt(0).toUpperCase() + sName.slice(1), sName));
+    searchSel.value = wantSearch;
+    searchSel.onchange = () => { localStorage.setItem(WYK_SEARCH_KEY, searchSel.value); loadCharts(); };
+  } else { searchSel.classList.add("hidden"); }
+  const data = map[wantSearch];
+  if (isV2(data)) renderV2(data); else renderV1(data);
+}
+
+function renderV1(data) {
+  const head = $("wykHead"), sel = $("wykSelect"), body = $("wykBody");
   const t = parseLocal(data.teraz);
   head.textContent = "Dane z: " + (data.plik_zrodlowy || "—") + (t ? " · stan na " + ddyyyy(t) + ", " + hhmm(t) : "");
   if (t) {
@@ -777,6 +808,130 @@ async function loadCharts() {
   if (!keys.includes(want)) want = keys[0];
   sel.value = want;
   renderChart(data, want);
+}
+
+// ===== Wersja 2: slupki=sztuk, linia ciagla=mediana, przerywana=mediana krocząca =====
+function renderV2(data) {
+  const head = $("wykHead"), sel = $("wykSelect"), body = $("wykBody");
+  const u = data.ustawienia || {};
+  const dd2 = parseLocal(data.dane_do || "");
+  head.textContent = (data._search ? data._search.charAt(0).toUpperCase() + data._search.slice(1) + " · " : "") +
+    data.serie.length + " serii" + (u.slupek_dni ? " · słupki co " + u.slupek_dni + " dni" : "") + (dd2 ? " · dane do " + ddyyyy(dd2) : "");
+  sel.classList.remove("hidden"); sel.innerHTML = "";
+  for (const s of data.serie) sel.appendChild(new Option((s.klucz || "?") + (s.malo_danych ? " (mało danych)" : ""), s.klucz));
+  let want = localStorage.getItem(WYK_SEL_KEY);
+  const keys = data.serie.map((s) => s.klucz);
+  if (!keys.includes(want)) want = keys[0];
+  sel.value = want;
+  sel.onchange = () => { localStorage.setItem(WYK_SEL_KEY, sel.value); renderSeriesV2(data, sel.value); };
+  renderSeriesV2(data, want);
+}
+
+function renderSeriesV2(data, key) {
+  const body = $("wykBody");
+  const s = data.serie.find((x) => x.klucz === key) || data.serie[0];
+  const u = data.ustawienia || {};
+  const pokaz = Array.isArray(u.pokaz) ? u.pokaz : ["sztuk", "mediana", "mediana_kroczaca"];
+  const rollDni = u.mediana_kroczaca_dni != null ? u.mediana_kroczaca_dni : 30;
+  const sub = "Sprzedaży: " + (s.sprzedazy != null ? s.sprzedazy : "?") +
+    ", średnio " + (s.srednio_na_slupek != null ? s.srednio_na_slupek : "?") + " na słupek" +
+    (s.mediana_30d != null ? " · mediana " + rollDni + " dni: " + zl(s.mediana_30d) + " (" + (s.sztuk_30d != null ? s.sztuk_30d : "?") + " szt.)" : "");
+  const warn = s.malo_danych ? '<span class="warn"> · mało danych</span>' : "";
+  const legend = '<div class="wyk-sub">' +
+    (pokaz.includes("sztuk") ? '<span style="color:var(--muted)">▮ liczba sztuk</span>  ' : "") +
+    (pokaz.includes("mediana") ? '<span style="color:var(--accent)">▬ mediana</span>  ' : "") +
+    (pokaz.includes("mediana_kroczaca") ? '<span style="color:#d7a92a">╌ mediana krocząca (' + rollDni + " dni)</span>" : "") +
+    '</div>';
+  body.innerHTML =
+    '<div class="wyk-title">' + escHtml(s.klucz || "") + warn + '</div>' +
+    '<div class="wyk-sub">' + escHtml(sub) + '</div>' + legend +
+    '<div class="wyk-chart">' + buildSvgV2(s.slupki || [], pokaz) + '<div class="wyk-tip"></div></div>' +
+    '<div class="wyk-foot">' + escHtml(u.filtry || "") + '<br>Cena = ostatnia cena w ogłoszeniu, nie cena transakcji.</div>';
+  attachTipV2(body, s.slupki || []);
+}
+
+// Wykres v2: slupki liczby sztuk (os lewa) + linia mediany i przerywana krocząca (os prawa, zł).
+function buildSvgV2(bars, pokaz) {
+  if (!bars.length) return '<div class="note">Brak słupków.</div>';
+  const showCount = pokaz.includes("sztuk"), showMed = pokaz.includes("mediana"), showRoll = pokaz.includes("mediana_kroczaca");
+  const n = bars.length;
+  const prices = [];
+  bars.forEach((b) => { if (showMed && b.mediana != null) prices.push(b.mediana); if (showRoll && b.mediana_kroczaca != null) prices.push(b.mediana_kroczaca); });
+  const havePrice = prices.length > 0;
+  const maxCount = Math.max(1, ...bars.map((b) => b.sztuk || 0));
+  let pLo = 0, pHi = 0;
+  if (havePrice) { pLo = Math.floor((Math.min(...prices) - 200) / 100) * 100; if (pLo < 0) pLo = 0; pHi = Math.ceil((Math.max(...prices) + 200) / 100) * 100; if (pHi <= pLo) pHi = pLo + 100; }
+  const L = 46, R = havePrice ? 54 : 14, T = 24, B = 48, H = 360;
+  const slot = Math.max(34, Math.round((Math.max(320, n * 54) - L - R) / n));
+  const W = L + R + slot * n, plotH = H - T - B, yBase = T + plotH;
+  const yCount = (c) => yBase - (c / maxCount) * plotH;
+  const yPrice = (v) => T + ((pHi - v) / (pHi - pLo)) * plotH;
+  const centers = bars.map((b, i) => L + slot * i + slot / 2);
+  const everyOther = slot < 50 && n > 8;
+  let s = '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="xMidYMid meet" role="img">';
+  s += '<defs><pattern id="luka2" width="6" height="6" patternTransform="rotate(45)" patternUnits="userSpaceOnUse"><rect width="6" height="6" fill="var(--muted)"/><line x1="0" y1="0" x2="0" y2="6" stroke="var(--line)" stroke-width="2"/></pattern></defs>';
+  const cStep = Math.max(1, Math.ceil(maxCount / 4));
+  for (let c = 0; c <= maxCount + 0.001; c += cStep) {
+    const yy = yCount(c).toFixed(1);
+    s += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="var(--line)" stroke-width="1"/>';
+    if (showCount) s += '<text x="' + (L - 6) + '" y="' + (yCount(c) + 4).toFixed(1) + '" text-anchor="end" font-size="10.5" fill="var(--muted)">' + c + '</text>';
+  }
+  if (havePrice) {
+    const step = Math.max(50, Math.ceil((pHi - pLo) / 4 / 50) * 50);
+    for (let v = pLo; v <= pHi + 1; v += step) s += '<text x="' + (W - R + 8) + '" y="' + (yPrice(v) + 4).toFixed(1) + '" text-anchor="start" font-size="10.5" fill="var(--muted)">' + zl(v) + '</text>';
+  }
+  bars.forEach((b, i) => {
+    const cx = centers[i], bw = Math.round(slot * 0.5), x = Math.round(cx - bw / 2);
+    if (showCount && (b.sztuk || 0) > 0) {
+      const top = yCount(b.sztuk), h = Math.max(1, yBase - top);
+      s += '<rect x="' + x + '" y="' + top.toFixed(1) + '" width="' + bw + '" height="' + h.toFixed(1) + '" rx="2" fill="' + (b.luka === true ? "url(#luka2)" : "var(--muted)") + '"/>';
+      s += '<text x="' + cx + '" y="' + (top - 4).toFixed(1) + '" text-anchor="middle" font-size="10" fill="var(--muted)">' + b.sztuk + '</text>';
+    }
+    if (!everyOther || i % 2 === 0) {
+      const od = parseLocal(b.od), dod = parseLocal(b.do);
+      s += '<text x="' + cx + '" y="' + (yBase + 16) + '" text-anchor="middle" font-size="9.5" fill="var(--muted)">' + (od ? dd(od) : "?") + "–" + (dod ? dd(dod) : "?") + '</text>';
+    }
+    s += '<rect class="hit" data-i="' + i + '" x="' + (L + slot * i) + '" y="' + T + '" width="' + slot + '" height="' + plotH + '" fill="transparent"/>';
+  });
+  const drawLine = (field, color, dash) => {
+    let d = "", pen = false;
+    bars.forEach((b, i) => { const v = b[field]; if (v == null) { pen = false; return; } d += (pen ? " L" : " M") + centers[i] + " " + yPrice(v).toFixed(1); pen = true; });
+    if (d) s += '<path d="' + d.trim() + '" fill="none" stroke="' + color + '" stroke-width="2"' + (dash ? ' stroke-dasharray="5 4"' : "") + '/>';
+    bars.forEach((b, i) => { const v = b[field]; if (v == null) return; s += '<circle cx="' + centers[i] + '" cy="' + yPrice(v).toFixed(1) + '" r="2.5" fill="' + color + '"/>'; });
+  };
+  if (showMed && havePrice) drawLine("mediana", "var(--accent)", false);
+  if (showRoll && havePrice) drawLine("mediana_kroczaca", "#d7a92a", true);
+  s += "</svg>";
+  return s;
+}
+
+function attachTipV2(root, bars) {
+  const svg = root.querySelector("svg"), tip = root.querySelector(".wyk-tip"), chart = root.querySelector(".wyk-chart");
+  if (!svg || !tip) return;
+  const show = (i, cx, cy) => {
+    const b = bars[i]; if (!b) return;
+    const od = parseLocal(b.od), dod = parseLocal(b.do);
+    let html = "<b>" + (od ? dd(od) : "?") + "–" + (dod ? dd(dod) : "?") + "</b><br>";
+    html += "Sztuk: " + (b.sztuk != null ? b.sztuk : "?");
+    html += "<br>Mediana: " + (b.mediana != null ? zl(b.mediana) : "za mało danych");
+    if (b.mediana_kroczaca != null) html += "<br>Mediana krocząca: " + zl(b.mediana_kroczaca);
+    if (b.luka === true) html += "<br>monitor nie działał części tego okresu — mniej sztuk, ceny zawyżone";
+    tip.innerHTML = html;
+    const r = chart.getBoundingClientRect();
+    tip.style.display = "block";
+    let left = cx - r.left + 12;
+    if (left + tip.offsetWidth > r.width) left = r.width - tip.offsetWidth - 4;
+    tip.style.left = Math.max(0, left) + "px";
+    tip.style.top = (cy - r.top + 12) + "px";
+  };
+  const hide = () => { tip.style.display = "none"; };
+  svg.querySelectorAll(".hit").forEach((h) => {
+    const i = +h.getAttribute("data-i");
+    h.addEventListener("pointerenter", (e) => show(i, e.clientX, e.clientY));
+    h.addEventListener("pointermove", (e) => show(i, e.clientX, e.clientY));
+    h.addEventListener("pointerleave", hide);
+    h.addEventListener("pointerdown", (e) => show(i, e.clientX, e.clientY));
+  });
 }
 
 function renderModelSelect(data) {
@@ -906,20 +1061,17 @@ function attachTip(root, weeks) {
   chart.addEventListener("pointerleave", hide);
 }
 
-// Wejscie z zakladki „Cennik": otworz Wykresy na klikniętym modelu (jesli jest w pliku).
+// Wejscie z zakladki „Cennik" (iPhone): otworz Wykresy na klikniętym modelu (jesli jest w pliku).
 function openChartFor(match) {
-  showTab("wykresy");
-  const data = readCharts();
-  if (!data) return;
-  const mdl = String((match && match.phonemodel) || "").replace(/^iPhone\s*/i, "").trim();
-  const mem = parseInt(String((match && match.builtinmemory_phones) || ""), 10);
-  const hit = data.modele.find((m) => String(m.model).trim() === mdl && +m.pamiec === mem);
-  if (hit) {
-    const k = modelKey(hit);
-    localStorage.setItem(WYK_SEL_KEY, k);
-    const sel = $("wykSelect"); if (sel) sel.value = k;
-    renderChart(data, k);
+  let blob = null; try { blob = JSON.parse(localStorage.getItem(WYK_KEY) || "null"); } catch (e) {}
+  const data = unwrapCharts(blob).iphone; // Cennik match = iPhone (phonemodel/builtinmemory_phones)
+  if (data && Array.isArray(data.modele)) {
+    const mdl = String((match && match.phonemodel) || "").replace(/^iPhone\s*/i, "").trim();
+    const mem = parseInt(String((match && match.builtinmemory_phones) || ""), 10);
+    const hit = data.modele.find((m) => String(m.model).trim() === mdl && +m.pamiec === mem);
+    if (hit) { localStorage.setItem(WYK_SEARCH_KEY, "iphone"); localStorage.setItem(WYK_SEL_KEY, modelKey(hit)); }
   }
+  showTab("wykresy"); // loadCharts() wyrenderuje iphone + zapamiętany model
 }
 
 // --- Cennik iPhone (kup / sprzedaj per model) ---
@@ -1298,22 +1450,35 @@ async function importRules(text) {
 
   // --- WYKRESY (opcjonalne pole; blad TU nie moze zablokowac regul) ---
   const hasCharts = obj && obj.wykresy != null;
+  const search = (obj && obj.wyszukiwanie ? String(obj.wyszukiwanie) : "iphone").trim().toLowerCase() || "iphone";
   let chartsMsg = "Wykresy: brak w pliku";
   if (hasCharts) {
     try {
       const w = validateChartsData(obj.wykresy);
-      try { localStorage.setItem(WYK_KEY, JSON.stringify(w)); }
+      w._search = search; w.dane_do = obj.dane_do || w.dane_do || null; // do naglowka
+      // scal z istniejacym blobem (serwer -> local), nadpisz tylko to wyszukiwanie — iPhone zostaje
+      let blob = null;
+      try { blob = await api("GET", "/charts"); } catch (e) {}
+      if (!blob) { try { blob = JSON.parse(localStorage.getItem(WYK_KEY) || "null"); } catch (e) {} }
+      blob = unwrapCharts(blob);
+      blob[search] = w;
+      try { localStorage.setItem(WYK_KEY, JSON.stringify(blob)); }
       catch (e) { throw new Error("nie zapisano w przeglądarce — " + e.message); }
       let srv = "";
-      try { await api("POST", "/charts", w); } // zapis na serwer → sync miedzy urzadzeniami
+      try { await api("POST", "/charts", blob); } // zapis na serwer → sync miedzy urzadzeniami
       catch (e) { srv = " (lokalnie; serwer niedostępny)"; }
+      localStorage.setItem(WYK_SEARCH_KEY, search); // pokaz wlasnie zaimportowane
       if (!$("view-wykresy").classList.contains("hidden")) loadCharts(); // odswiez, jesli zakladka otwarta
-      const t = parseLocal(w.teraz);
-      chartsMsg = "Wykresy: " + w.modele.length + " modeli" + (t ? ", stan na " + ddyyyy(t) + " " + hhmm(t) : "") + " ✓" + srv;
+      const cnt = isV2(w) ? (w.serie.length + " serii") : (w.modele.length + " modeli");
+      chartsMsg = "Wykresy (" + search + "): " + cnt + " ✓" + srv;
     } catch (e) { chartsMsg = "Wykresy: błąd — " + e.message; }
   }
 
-  // --- REGULY (dokladnie jak dotad) ---
+  // --- REGULY ---
+  if (obj.wersja === 2) { // reguly v2 (model+RAM+dysk) obsluguje worker przy wysylce ofert — tu tylko wykresy
+    showMsg("Zaimportowano · " + chartsMsg + " · Reguły v2 (model+RAM+dysk) ustawia worker — pominięte w panelu.", hasCharts ? "ok" : "err");
+    return;
+  }
   let rules;
   try { rules = parseImport(obj); } catch (e) { showMsg("Reguły: błąd — " + e.message + " · " + chartsMsg, "err"); return; }
   if (!rules.length) { showMsg("Reguły: brak w pliku · " + chartsMsg, hasCharts ? "ok" : "err"); return; }
