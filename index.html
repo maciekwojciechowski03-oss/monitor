@@ -1103,6 +1103,8 @@ async function loadMsg() {
       const dJutro = el("textarea", "msgta"); dJutro.value = t.dropMsgJutro || ""; dJutro.placeholder = 'Potaniałe „jutro"';
       c.appendChild(el("label", "msglbl", 'Wiadomość do potaniałych „dziś"')); c.appendChild(dDzis);
       c.appendChild(el("label", "msglbl", 'Wiadomość do potaniałych „jutro"')); c.appendChild(dJutro);
+      const dRem = el("textarea", "msgta"); dRem.value = t.reminderMsg || ""; dRem.placeholder = 'Przypomnienie, gdy już pisaliśmy — np. Dzień dobry, wracam z zapytaniem o telefon. Oferta {OFFER} zł nadal aktualna. Puste = bot nie wysyła przypomnienia.';
+      c.appendChild(el("label", "msglbl", 'Przypomnienie o ofercie')); c.appendChild(dRem);
 
       const payload = () => ({
         msgDzis: dzis.value, msgJutro: jutro.value,
@@ -1111,6 +1113,7 @@ async function loadMsg() {
         agedMaxDays: parseInt(agedMax.value, 10) || 5,
         agedMsgDzis: aDzis.value, agedMsgJutro: aJutro.value,
         dropMsgDzis: dDzis.value, dropMsgJutro: dJutro.value,
+        reminderMsg: dRem.value,
         notifyMode: notifySel.value,
         notifyMarginZl: parseInt(notifyMargin.value, 10) || 0,
       });
