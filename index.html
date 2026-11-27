@@ -934,7 +934,7 @@ function buildSvg(weeks, med30, mySale) {
   if (lo < 0) lo = 0;
   if (hi <= lo) hi = lo + 100;
   const n = weeks.length;
-  const L = 52, R = 14, T = 28, B = 48, H = 360;
+  const L = 52, R = mySale != null ? 72 : 14, T = 28, B = 48, H = 360; // szerszy prawy margines na etykiete sredniej sprzedazy
   const slot = Math.max(34, Math.round((Math.max(320, n * 52) - L - R) / n));
   const W = L + R + slot * n;
   const plotH = H - T - B, yBase = T + plotH;
@@ -954,15 +954,9 @@ function buildSvg(weeks, med30, mySale) {
   }
   if (mySale != null && mySale >= lo && mySale <= hi) { // czerwona przerywana = moja srednia realna sprzedaz
     const yl = y(mySale);
+    // Linia konczy sie przy ostatnim slupku (W - R); etykieta w PUSTYM prawym marginesie, nie na slupkach.
     s += '<line x1="' + L + '" y1="' + yl.toFixed(1) + '" x2="' + (W - R) + '" y2="' + yl.toFixed(1) + '" stroke="#e23b3b" stroke-width="1.8" stroke-dasharray="6 4"/>';
-    // Napis w plakietce (tlo = kolor karty), zeby nie zlewal sie z cenami slupkow.
-    const txt = "sprzedaż " + zl(mySale);
-    const tw = txt.length * 6.1 + 12;
-    const below = (yl - 13) < (T + 2);           // za blisko gory -> pod linia
-    const ty = below ? yl + 14 : yl - 6;         // baseline tekstu
-    const ry = below ? yl + 3 : yl - 15;         // gora plakietki
-    s += '<rect x="' + (W - R - tw).toFixed(1) + '" y="' + ry.toFixed(1) + '" width="' + tw.toFixed(1) + '" height="15" rx="4" fill="var(--card)" stroke="#e23b3b" stroke-width="1"/>';
-    s += '<text x="' + (W - R - 6) + '" y="' + ty.toFixed(1) + '" text-anchor="end" font-size="10.5" font-weight="700" fill="#e23b3b">' + txt + '</text>';
+    s += '<text x="' + (W - R + 5) + '" y="' + (yl + 3.5).toFixed(1) + '" text-anchor="start" font-size="11" font-weight="800" fill="#e23b3b">' + zl(mySale) + '</text>';
   }
   weeks.forEach((w, i) => {
     const cx = L + slot * i + slot / 2, bw = Math.round(slot * 0.58), x = Math.round(cx - bw / 2);
