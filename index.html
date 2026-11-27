@@ -194,13 +194,26 @@
   .wyk-title { font-weight: 700; font-size: 1.05rem; margin: 2px 0 4px; }
   .wyk-sub { color: var(--muted); font-size: .82rem; margin: 0 0 14px; }
   .wyk-sub .warn { color: #c79a1e; display: block; margin-top: 4px; font-weight: 600; }
-  .wyk-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .wyk-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px; margin-bottom: 16px; }
   .wyk-tile { background: var(--soft); border: 1px solid var(--line); border-radius: 12px; padding: 12px; }
   .wyk-tile .lab { font-size: .62rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 700; }
   .wyk-tile .val { font-size: 1.35rem; font-weight: 800; margin: 5px 0 2px; }
   .wyk-tile .cap { font-size: .72rem; color: var(--muted); }
   .wyk-tile.green .val { color: var(--accent); }
   .wyk-tile.gold .val { color: #d7a92a; }
+  .wyk-tile.red .val { color: #e23b3b; }
+  .sale-box { margin-top: 16px; padding: 14px; background: var(--soft); border: 1px solid var(--line); border-radius: 12px; }
+  .sale-h { font-size: .82rem; font-weight: 700; color: var(--muted); margin-bottom: 10px; }
+  .sale-add { display: flex; gap: 8px; margin-bottom: 10px; }
+  .sale-in { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--card); color: var(--text); font-size: .9rem; }
+  .sale-list { display: flex; flex-direction: column; gap: 6px; }
+  .sale-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; background: var(--card); border: 1px solid var(--line); border-radius: 9px; font-size: .9rem; }
+  .sale-row .sale-dt { color: var(--muted); font-size: .8rem; }
+  .sale-row b { margin-left: auto; color: #e23b3b; }
+  .sale-del { border: none; background: transparent; color: var(--muted); cursor: pointer; font-size: .95rem; padding: 2px 4px; }
+  .sale-del:hover { color: #e23b3b; }
+  .sale-empty { font-size: .82rem; color: var(--muted); }
+  .sale-foot { margin-top: 10px; font-size: .74rem; color: var(--muted); }
   .wyk-chart { position: relative; }
   .wyk-chart svg { width: 100%; height: auto; display: block; touch-action: none; }
   .wyk-foot { color: var(--muted); font-size: .74rem; margin-top: 10px; line-height: 1.5; }
@@ -699,6 +712,8 @@ $("tabBlock").onclick = () => showTab("block");
 const WYK_KEY = "wykresy_cen_v1";       // blob wykresow per-wyszukiwanie: { "<wyszukiwanie>": <obj v1|v2>, ... }
 const WYK_SEL_KEY = "wykresy_wybor";    // zapamietany wybor modelu/serii
 const WYK_SEARCH_KEY = "wykresy_wyszukiwanie"; // zapamietany wybor wyszukiwania (iphone/macbook)
+let MY_SALES = [];        // moje realne ceny sprzedazy (z /sales) -> czerwona linia
+let CUR_WYK_SEARCH = "";  // aktualnie wybrane wyszukiwanie w zakladce Wykresy
 
 // Blob /charts jest opakowany per-wyszukiwanie. Starsze dane to goly obiekt v1 (ma .modele)
 // -> traktuj jak { iphone: obj }. Zwraca zawsze mape wyszukiwanie->obiekt wykresow.
@@ -787,6 +802,8 @@ async function loadCharts() {
     searchSel.value = wantSearch;
     searchSel.onchange = () => { localStorage.setItem(WYK_SEARCH_KEY, searchSel.value); loadCharts(); };
   } else { searchSel.classList.add("hidden"); }
+  CUR_WYK_SEARCH = wantSearch;
+  try { const s = await api("GET", "/sales"); MY_SALES = Array.isArray(s) ? s : []; } catch (e) { MY_SALES = []; }
   const data = map[wantSearch];
   if (isV2(data)) renderV2(data); else renderV1(data);
 }
@@ -847,6 +864,8 @@ function renderChart(data, key) {
       '<div class="empty">Nie ma wykresu dla tego modelu — za mało sprzedaży.</div>';
     return;
   }
+  const sales = MY_SALES.filter((x) => x.search === CUR_WYK_SEARCH && x.label === labelOf(m));
+  const mySale = sales.length ? Math.round(sales.reduce((a, s) => a + (s.price || 0), 0) / sales.length) : null;
   const kpi = computeKpis(m);
   const _fb = (m.tygodnie || []).find((w) => w.od && w.do);
   const winDni = _fb ? daysBetween(parseLocal(_fb.od), parseLocal(_fb.do)) + 1 : 7; // 7 dla iPhone, 14 dla MacBooków
@@ -863,25 +882,55 @@ function renderChart(data, key) {
     tile("green", "Ostatnie pełne " + winDni + " dni", kpi.last ? zl(kpi.last.mediana) : "–", lastCap) +
     tile("", "Poprzednie " + winDni + " dni", kpi.prev ? zl(kpi.prev.mediana) : "–", changeCap) +
     tile("gold", "Mediana 30 dni", m.mediana_30d != null ? zl(m.mediana_30d) : "–", m.sztuk_30d != null ? m.sztuk_30d + " szt." : "—") +
+    tile("red", "Twoja śr. sprzedaż", mySale != null ? zl(mySale) : "–", sales.length ? sales.length + " szt." : "—") +
     '</div>';
 
   const foot = '<div class="wyk-foot">' + escHtml(data.filtry || "") + '<br>Cena = ostatnia cena w ogłoszeniu, nie cena transakcji.</div>';
+
+  const salesRows = sales.slice().sort((a, b) => b.ts - a.ts).map((s) =>
+    '<div class="sale-row"><span class="sale-dt">' + new Date(s.ts).toLocaleDateString("pl-PL") + '</span>' +
+    '<b>' + zl(s.price) + '</b><button class="sale-del" data-id="' + escHtml(s.id) + '" title="Usuń">✕</button></div>'
+  ).join("") || '<div class="sale-empty">Brak wpisów dla tego modelu.</div>';
+  const salesUi =
+    '<div class="sale-box"><div class="sale-h">Twoje sprzedaże — ' + escHtml(labelOf(m)) + '</div>' +
+    '<div class="sale-add"><input type="number" inputmode="numeric" class="sale-in" placeholder="za ile sprzedałeś (zł)" />' +
+    '<button class="sm sale-save">Dodaj</button></div>' +
+    '<div class="sale-list">' + salesRows + '</div>' +
+    '<div class="sale-foot">Czerwona przerywana linia na wykresie = średnia z tych cen.</div></div>';
 
   body.innerHTML =
     '<div class="wyk-title">' + escHtml("Cena " + labelOf(m) + (winDni === 7 ? " – tydzień po tygodniu" : " – okno " + winDni + " dni")) + '</div>' +
     '<div class="wyk-sub">' + escHtml(sub) + subWarn + '</div>' +
     tiles +
-    '<div class="wyk-chart">' + buildSvg(m.tygodnie || [], m.mediana_30d) + '<div class="wyk-tip"></div></div>' +
-    foot;
+    '<div class="wyk-chart">' + buildSvg(m.tygodnie || [], m.mediana_30d, mySale) + '<div class="wyk-tip"></div></div>' +
+    foot + salesUi;
 
   attachTip(body, m.tygodnie || []);
+
+  const inp = body.querySelector(".sale-in"), addBtn = body.querySelector(".sale-save");
+  if (addBtn) addBtn.onclick = async () => {
+    const price = parseInt(inp.value, 10);
+    if (!(price > 0)) { showMsg("Podaj cenę > 0", "err"); return; }
+    addBtn.disabled = true;
+    try { await api("POST", "/sales", { search: CUR_WYK_SEARCH, label: labelOf(m), price }); await loadCharts(); }
+    catch (e) { showMsg(e.message, "err"); addBtn.disabled = false; }
+  };
+  body.querySelectorAll(".sale-del").forEach((b) => b.onclick = async () => {
+    if (!confirm("Usunąć ten wpis sprzedaży?")) return;
+    try { await api("DELETE", "/sales?id=" + encodeURIComponent(b.dataset.id)); await loadCharts(); }
+    catch (e) { showMsg(e.message, "err"); }
+  });
 }
 
-function buildSvg(weeks, med30) {
+function buildSvg(weeks, med30, mySale) {
   const meds = weeks.filter((w) => w.mediana != null).map((w) => w.mediana);
   if (!meds.length) return '<div class="note">Brak tygodni z medianą (za mało sprzedaży).</div>';
   let lo = Math.floor((Math.min(...meds) - 350) / 100) * 100;
   let hi = Math.ceil((Math.max(...meds) + 200) / 100) * 100;
+  if (mySale != null) { // skala musi objac moja srednia sprzedaz, inaczej linia poza wykresem
+    if (mySale < lo + 50) lo = Math.floor((mySale - 150) / 100) * 100;
+    if (mySale > hi - 50) hi = Math.ceil((mySale + 150) / 100) * 100;
+  }
   if (lo < 0) lo = 0;
   if (hi <= lo) hi = lo + 100;
   const n = weeks.length;
@@ -902,6 +951,11 @@ function buildSvg(weeks, med30) {
   if (med30 != null && med30 >= lo && med30 <= hi) {
     const yy = y(med30).toFixed(1);
     s += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="#d7a92a" stroke-width="1.5" stroke-dasharray="5 4"/>';
+  }
+  if (mySale != null && mySale >= lo && mySale <= hi) { // czerwona przerywana = moja srednia realna sprzedaz
+    const yy = y(mySale).toFixed(1);
+    s += '<line x1="' + L + '" y1="' + yy + '" x2="' + (W - R) + '" y2="' + yy + '" stroke="#e23b3b" stroke-width="1.8" stroke-dasharray="6 4"/>';
+    s += '<text x="' + (W - R) + '" y="' + (y(mySale) - 4).toFixed(1) + '" text-anchor="end" font-size="10.5" font-weight="700" fill="#e23b3b">sprzedaż ' + zl(mySale) + '</text>';
   }
   weeks.forEach((w, i) => {
     const cx = L + slot * i + slot / 2, bw = Math.round(slot * 0.58), x = Math.round(cx - bw / 2);
