@@ -865,7 +865,7 @@ function renderChart(data, key) {
     return;
   }
   const sales = MY_SALES.filter((x) => x.search === CUR_WYK_SEARCH && x.label === labelOf(m));
-  const mySale = sales.length ? Math.round(sales.reduce((a, s) => a + (s.price || 0), 0) / sales.length) : null;
+  const mySale = sales.length ? Math.round(sales.reduce((a, s) => a + (s.price || 0), 0) / sales.length / 50) * 50 : null; // srednia zaokraglona do 50 zl
   const kpi = computeKpis(m);
   const _fb = (m.tygodnie || []).find((w) => w.od && w.do);
   const winDni = _fb ? daysBetween(parseLocal(_fb.od), parseLocal(_fb.do)) + 1 : 7; // 7 dla iPhone, 14 dla MacBooków
